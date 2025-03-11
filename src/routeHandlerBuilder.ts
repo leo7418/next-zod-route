@@ -1,13 +1,7 @@
 // eslint-disable-next-line import/no-named-as-default
 import z from 'zod';
 
-import { HandlerFunction, HandlerServerErrorFn, OriginalRouteHandler } from './types';
-
-type Middleware<
-  TContext = Record<string, unknown>,
-  TReturnType = Record<string, unknown>,
-  TMetadata = unknown,
-> = (opts: { request: Request; context?: TContext; metadata?: TMetadata }) => Promise<TReturnType>;
+import { HandlerFunction, HandlerServerErrorFn, MiddlewareFunction, NextFunction, OriginalRouteHandler } from './types';
 
 /**
  * Type of the middleware function passed to a safe action client.
@@ -16,7 +10,12 @@ export type MiddlewareFn<TContext, TReturnType, TMetadata = unknown> = {
   (opts: { context: TContext; request: Request; metadata?: TMetadata }): Promise<TReturnType>;
 };
 
-export class InternalRouteHandlerError extends Error {}
+export class InternalRouteHandlerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InternalRouteHandlerError';
+  }
+}
 
 export class RouteHandlerBuilder<
   TParams extends z.Schema = z.Schema,
@@ -32,7 +31,7 @@ export class RouteHandlerBuilder<
     bodySchema: TBody;
     metadataSchema?: TMetadata;
   };
-  readonly middlewares: Middleware<TContext, z.infer<TMetadata>, z.infer<TMetadata>>[];
+  readonly middlewares: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
   readonly handleServerError?: HandlerServerErrorFn;
   readonly metadataValue: z.infer<TMetadata>;
   readonly contextType!: TContext;
@@ -55,7 +54,7 @@ export class RouteHandlerBuilder<
       bodySchema: TBody;
       metadataSchema?: TMetadata;
     };
-    middlewares?: Middleware<TContext, z.infer<TMetadata>, z.infer<TMetadata>>[];
+    middlewares?: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
     handleServerError?: HandlerServerErrorFn;
     contextType: TContext;
     metadataValue?: z.infer<TMetadata>;
@@ -127,8 +126,11 @@ export class RouteHandlerBuilder<
    * @param middleware - The middleware function to be executed
    * @returns A new instance of the RouteHandlerBuilder
    */
-  use<TNewContext>(middleware: MiddlewareFn<TContext, TNewContext, z.infer<TMetadata>>) {
+  use<TNewContext extends Record<string, unknown>>(
+    middleware: MiddlewareFunction<TContext, TNewContext, z.infer<TMetadata>>,
+  ): RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNewContext, TMetadata> {
     type MergedContext = TContext & TNewContext;
+
     return new RouteHandlerBuilder<TParams, TQuery, TBody, MergedContext, TMetadata>({
       ...this,
       middlewares: [...this.middlewares, middleware],
@@ -211,44 +213,75 @@ export class RouteHandlerBuilder<
           metadata = metadataResult.data;
         }
 
-        // Execute middlewares and build context
+        // Execute middleware chain
         let middlewareContext: TContext = {} as TContext;
-        for (const middleware of this.middlewares) {
-          const result = await middleware({
-            request,
-            context: middlewareContext,
-            metadata,
-          });
-          middlewareContext = { ...middlewareContext, ...result };
-        }
 
-        // Call the handler function with the validated params, query, and body
-        const result = await handler(request, {
-          params: params as z.infer<TParams>,
-          query: query as z.infer<TQuery>,
-          body: body as z.infer<TBody>,
-          data: middlewareContext,
-          metadata: metadata as z.infer<TMetadata>,
-        });
+        const executeMiddlewareChain = async (index: number): Promise<Response> => {
+          if (index >= this.middlewares.length) {
+            try {
+              const result = await handler(request, {
+                params: params as z.infer<TParams>,
+                query: query as z.infer<TQuery>,
+                body: body as z.infer<TBody>,
+                data: middlewareContext,
+                metadata: metadata as z.infer<TMetadata>,
+              });
 
-        // If the result is already a Response, return it
-        if (result instanceof Response) {
-          return result;
-        }
+              if (result instanceof Response) return result;
 
-        // Otherwise, return a new Response with the result (else NextJS will throw an error and nothing will be returned)
-        return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
+              return new Response(JSON.stringify(result), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            } catch (error) {
+              console.log('Error', error);
+              return handleError(error as Error, this.handleServerError);
+            }
+          }
+
+          const middleware = this.middlewares[index];
+          if (!middleware) return executeMiddlewareChain(index + 1);
+
+          const next: NextFunction = async (options = {}) => {
+            if (options.context) {
+              middlewareContext = { ...middlewareContext, ...options.context };
+            }
+            return executeMiddlewareChain(index + 1);
+          };
+
+          try {
+            const result = await middleware({
+              request,
+              context: middlewareContext,
+              metadata,
+              next,
+            });
+
+            if (result instanceof Response) return result;
+
+            middlewareContext = { ...middlewareContext, ...result };
+            return next();
+          } catch (error) {
+            return handleError(error as Error, this.handleServerError);
+          }
+        };
+
+        return executeMiddlewareChain(0);
       } catch (error) {
-        if (error instanceof InternalRouteHandlerError) {
-          return new Response(error.message, { status: 400 });
-        }
-
-        if (this.handleServerError) {
-          return this.handleServerError(error as Error);
-        }
-
-        return new Response(JSON.stringify({ message: 'Internal server error' }), { status: 500 });
+        return handleError(error as Error, this.handleServerError);
       }
     };
   }
 }
+
+const handleError = (error: Error, handleServerError?: HandlerServerErrorFn): Response => {
+  if (error instanceof InternalRouteHandlerError) {
+    return new Response(error.message, { status: 400 });
+  }
+
+  if (handleServerError) {
+    return handleServerError(error as Error);
+  }
+
+  return new Response(JSON.stringify({ message: 'Internal server error' }), { status: 500 });
+};

@@ -17,6 +17,9 @@ A fork from [next-safe-route](https://github.com/richardsolomou/next-safe-route)
 - **😌 Easy to Use:** Simple and intuitive API that makes defining route handlers a breeze.
 - **🔄 Flexible Response Handling:** Return Response objects directly or return plain objects that are automatically converted to JSON responses.
 - **🧪 Fully Tested:** Extensive test suite to ensure everything works reliably.
+- **🔐 Enhanced Middleware System:** Powerful middleware system with pre/post handler execution, response modification, and context chaining.
+- **🎯 Metadata Support:** Add and validate metadata for your routes with full type safety.
+- **🛡️ Custom Error Handling:** Flexible error handling with custom error handlers for both middleware and route handlers.
 
 ## Installation
 
@@ -156,25 +159,56 @@ Metadata is optional by default. If you define a metadata schema but don't provi
 You can add middleware to your route handler with the `use` method. Middleware functions can add data to the context that will be available in your handler.
 
 ```ts
-const authMiddleware = async ({ request, metadata }) => {
-  // Get the token from the request headers
-  const token = request.headers.get('authorization')?.split(' ')[1];
+const loggingMiddleware = async ({ next }) => {
+  console.log('Before handler');
+  const startTime = performance.now();
 
-  // You can access metadata in middleware
-  if (metadata?.role !== 'admin') {
-    throw new Error('Unauthorized');
-  }
+  const response = await next();
 
-  // Validate the token and get the user
-  const user = await validateToken(token);
+  const endTime = performance.now();
+  console.log(`After handler - took ${Math.round(endTime - startTime)}ms`);
 
-  // Return the user to be added to the context
-  return { user };
+  return response;
 };
 
-const permissionsMiddleware = async ({ metadata }) => {
+const authMiddleware = async ({ request, metadata, next }) => {
+  try {
+    // Get the token from the request headers
+    const token = request.headers.get('authorization')?.split(' ')[1];
+
+    // You can access metadata in middleware
+    if (metadata?.role !== 'admin') {
+      throw new Error('Unauthorized');
+    }
+
+    // Validate the token and get the user
+    const user = await validateToken(token);
+
+    // Add context & continue chain
+    const response = await next({
+      context: { user },
+    });
+
+    // You can modify the response after the handler
+    return new Response(response.body, {
+      status: response.status,
+      headers: {
+        ...Object.fromEntries(response.headers.entries()),
+        'X-User-Id': user.id,
+      },
+    });
+  } catch (error) {
+    // Errors in middleware are caught and handled by the error handler
+    throw error;
+  }
+};
+
+const permissionsMiddleware = async ({ metadata, next }) => {
   // Metadata are optional and type-safe
-  return { permissions: metadata?.permissions ?? ['read'] };
+  const response = await next({
+    context: { permissions: metadata?.permissions ?? ['read'] },
+  });
+  return response;
 };
 
 export const GET = createZodRoute()
@@ -184,6 +218,7 @@ export const GET = createZodRoute()
       permissions: z.array(z.string()).optional(),
     }),
   )
+  .use(loggingMiddleware)
   .use(authMiddleware)
   .use(permissionsMiddleware)
   .handler((request, context) => {
@@ -201,12 +236,148 @@ Middleware functions receive:
 - `request`: The request object
 - `context`: The context object with data from previous middlewares
 - `metadata`: The validated metadata object (optional)
+- `next`: Function to continue the chain and add context
 
-The returned object will be merged with the context's data property.
+The middleware can:
+
+1. Execute code before/after the handler
+2. Modify the response
+3. Add context data through the chain
+4. Short-circuit the chain by returning a Response
+5. Throw errors that will be caught by the error handler
+
+### Middleware Features
+
+#### Pre/Post Handler Execution
+
+```ts
+const timingMiddleware = async ({ next }) => {
+  console.log('Starting request...');
+  const start = performance.now();
+
+  const response = await next();
+
+  const duration = performance.now() - start;
+  console.log(`Request took ${duration}ms`);
+
+  return response;
+};
+```
+
+#### Response Modification
+
+```ts
+const headerMiddleware = async ({ next }) => {
+  const response = await next();
+
+  return new Response(response.body, {
+    status: response.status,
+    headers: {
+      ...Object.fromEntries(response.headers.entries()),
+      'X-Custom': 'value',
+    },
+  });
+};
+```
+
+#### Context Chaining
+
+```ts
+const middleware1 = async ({ next }) => {
+  const response = await next({
+    context: { value1: 'first' },
+  });
+  return response;
+};
+
+const middleware2 = async ({ context, next }) => {
+  // Access previous context
+  console.log(context.value1); // 'first'
+
+  const response = await next({
+    context: { value2: 'second' },
+  });
+  return response;
+};
+```
+
+#### Early Returns
+
+```ts
+const authMiddleware = async ({ next }) => {
+  const isAuthed = false;
+
+  if (!isAuthed) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  return next();
+};
+```
+
+### Migration Guide (v0.2.0)
+
+If you're upgrading from v0.1.x to v0.2.0, there are some changes to the middleware system:
+
+#### Before (v0.1.x)
+
+```typescript
+const authMiddleware = async () => {
+  return { user: { id: 'user-123' } };
+};
+
+const route = createZodRoute()
+  .use(authMiddleware)
+  .handler((req, ctx) => {
+    const { user } = ctx.data;
+    return { data: user.id };
+  });
+```
+
+#### After (v0.2.0)
+
+```typescript
+const authMiddleware = async ({ next }) => {
+  // Execute code before handler
+  console.log('Checking auth...');
+
+  // Add context & continue chain
+  const response = await next({
+    context: { user: { id: 'user-123' } },
+  });
+
+  // Modify response or execute code after
+  return new Response(response.body, {
+    headers: {
+      ...Object.fromEntries(response.headers.entries()),
+      'X-User-Id': 'user-123',
+    },
+  });
+};
+
+const route = createZodRoute()
+  .use(authMiddleware)
+  .handler((req, ctx) => {
+    const { user } = ctx.data;
+    return { data: user.id };
+  });
+```
+
+Key changes in v0.2.0:
+
+1. Middleware must now accept an object with `request`, `context`, `metadata`, and `next`
+2. Context is passed explicitly via `next({ context: {...} })`
+3. Middleware can execute code before and after the handler
+4. Middleware can modify the response
+5. Middleware can short-circuit by returning a Response
+6. Error handling in middleware is now consistent with handler error handling
 
 ### Custom Error Handler
 
-You can specify a custom error handler function to handle errors thrown in your route handler:
+You can specify a custom error handler function to handle errors thrown in your route handler or middleware:
 
 ```ts
 import { createZodRoute } from 'next-zod-route';
@@ -234,10 +405,15 @@ const safeRoute = createZodRoute({
   },
 });
 
-export const GET = safeRoute.handler((request, context) => {
-  // This error will be caught by the custom error handler
-  throw new CustomError('Something went wrong', 400);
-});
+export const GET = safeRoute
+  .use(async () => {
+    // This error will be caught by the custom error handler
+    throw new CustomError('Middleware error', 400);
+  })
+  .handler((request, context) => {
+    // This error will also be caught by the custom error handler
+    throw new CustomError('Handler error', 400);
+  });
 ```
 
 By default, if no custom error handler is provided, the library will return a generic "Internal server error" message with a 500 status code to avoid information leakage.

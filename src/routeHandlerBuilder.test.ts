@@ -1,7 +1,8 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod';
 
-import { createZodRoute } from '.';
+import { createZodRoute } from './createZodRoute';
+import { MiddlewareFunction } from './types';
 
 const paramsSchema = z.object({
   id: z.string().uuid(),
@@ -56,14 +57,16 @@ describe('params validation', () => {
 
 describe('query validation', () => {
   it('should validate and handle valid query', async () => {
-    const GET = createZodRoute().handler((request, context) => {
-      expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
-      const search = context.query.search;
-      return Response.json({ search }, { status: 200 });
-    });
+    const GET = createZodRoute()
+      .params(paramsSchema)
+      .handler((request, context) => {
+        expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
+        const search = context.query.search;
+        return Response.json({ search }, { status: 200 });
+      });
 
     const request = new Request('http://localhost/?search=test');
-    const response = await GET(request, { params: Promise.resolve({}) });
+    const response = await GET(request, { params: Promise.resolve({ id: 'D570D9AB-E002-46EA-996F-0E0023C8F702' }) });
     const data = await response.json();
 
     expect(response.status).toBe(200);
@@ -234,8 +237,11 @@ describe('combined validation', () => {
   });
 
   it('should execute middleware and add context properties', async () => {
-    const middleware = async () => {
-      return { user: { id: 'user-123', role: 'admin' } };
+    const middleware: MiddlewareFunction<Record<string, unknown>, { user: { id: string; role: string } }> = async ({
+      next,
+    }) => {
+      const result = await next({ context: { user: { id: 'user-123', role: 'admin' } } });
+      return result;
     };
 
     const GET = createZodRoute()
@@ -262,12 +268,14 @@ describe('combined validation', () => {
   });
 
   it('should execute multiple middlewares and merge context properties', async () => {
-    const middleware1 = async () => {
-      return { user: { id: 'user-123' } };
+    const middleware1: MiddlewareFunction<Record<string, unknown>, { user: { id: string } }> = async ({ next }) => {
+      const result = await next({ context: { user: { id: 'user-123' } } });
+      return result;
     };
 
-    const middleware2 = async () => {
-      return { permissions: ['read', 'write'] };
+    const middleware2: MiddlewareFunction<Record<string, unknown>, { permissions: string[] }> = async ({ next }) => {
+      const result = await next({ context: { permissions: ['read', 'write'] } });
+      return result;
     };
 
     const GET = createZodRoute()
@@ -549,15 +557,14 @@ describe('metadata validation', () => {
   });
 
   it('should pass metadata to middleware', async () => {
-    const middleware = async ({
-      metadata,
-    }: {
-      request: Request;
-      context: Record<string, unknown>;
-      metadata?: z.infer<typeof metadataSchema>;
-    }) => {
+    const middleware: MiddlewareFunction<
+      Record<string, unknown>,
+      { authorized: boolean },
+      z.infer<typeof metadataSchema>
+    > = async ({ next, metadata }) => {
       expect(metadata).toEqual({ permission: 'read', role: 'admin' });
-      return { authorized: true };
+      const context = await next();
+      return { ...context, authorized: true };
     };
 
     const GET = createZodRoute()
@@ -585,15 +592,14 @@ describe('metadata validation', () => {
   });
 
   it('should handle undefined metadata in middleware', async () => {
-    const middleware = async ({
-      metadata,
-    }: {
-      request: Request;
-      context: Record<string, unknown>;
-      metadata?: z.infer<typeof metadataSchema>;
-    }) => {
+    const middleware: MiddlewareFunction<
+      Record<string, unknown>,
+      { authorized: boolean },
+      z.infer<typeof metadataSchema>
+    > = async ({ next, metadata }) => {
       expect(metadata).toBeUndefined();
-      return { authorized: false };
+      const result = await next({ context: { authorized: false } });
+      return result;
     };
 
     const GET = createZodRoute()
@@ -613,25 +619,22 @@ describe('metadata validation', () => {
   });
 
   it('should work with multiple middlewares accessing metadata', async () => {
-    const middleware1 = async ({
-      metadata,
-    }: {
-      request: Request;
-      context: Record<string, unknown>;
-      metadata?: z.infer<typeof metadataSchema>;
-    }) => {
-      return { hasPermission: metadata?.permission === 'read' };
+    const middleware1: MiddlewareFunction<
+      Record<string, unknown>,
+      { hasPermission: boolean },
+      z.infer<typeof metadataSchema>
+    > = async ({ next, metadata }) => {
+      const result = await next({ context: { hasPermission: metadata?.permission === 'read' } });
+      return result;
     };
 
-    const middleware2 = async ({
-      metadata,
-    }: {
-      request: Request;
-      context: { hasPermission: boolean };
-      metadata?: z.infer<typeof metadataSchema>;
-    }) => {
-      console.log({ metadata });
-      return { isAdmin: metadata?.role === 'admin' };
+    const middleware2: MiddlewareFunction<
+      Record<string, unknown>,
+      { isAdmin: boolean },
+      z.infer<typeof metadataSchema>
+    > = async ({ next, metadata }) => {
+      const result = await next({ context: { isAdmin: metadata?.role === 'admin' } });
+      return result;
     };
 
     const GET = createZodRoute()
@@ -655,5 +658,162 @@ describe('metadata validation', () => {
       hasPermission: true,
       isAdmin: true,
     });
+  });
+});
+
+describe('enhanced middleware functionality', () => {
+  it('should allow middleware to execute code before and after handler', async () => {
+    const logs: string[] = [];
+
+    const loggingMiddleware: MiddlewareFunction = async ({ next }) => {
+      logs.push('before handler');
+      const startTime = performance.now();
+
+      const response = await next();
+
+      const endTime = performance.now();
+      logs.push(`after handler - took ${Math.round(endTime - startTime)}ms`);
+
+      return response;
+    };
+
+    const GET = createZodRoute()
+      .use(loggingMiddleware)
+      .handler(() => {
+        logs.push('handler executed');
+        return { success: true };
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ success: true });
+    expect(logs).toEqual(['before handler', 'handler executed', expect.stringMatching(/after handler - took \d+ms/)]);
+  });
+
+  it('should allow middleware to modify response', async () => {
+    const addHeaderMiddleware: MiddlewareFunction = async ({ next }) => {
+      const response = await next();
+
+      // Create new response with additional header
+      return new Response(response.body, {
+        status: response.status,
+        headers: {
+          ...Object.fromEntries(response.headers.entries()),
+          'X-Custom-Header': 'middleware-added',
+        },
+      });
+    };
+
+    const GET = createZodRoute()
+      .use(addHeaderMiddleware)
+      .handler(() => {
+        return { success: true };
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+
+    expect(response.headers.get('X-Custom-Header')).toBe('middleware-added');
+    expect(await response.json()).toEqual({ success: true });
+  });
+
+  it('should pass context through middleware chain', async () => {
+    const middleware1: MiddlewareFunction = async ({ next }) => {
+      const response = await next({
+        context: { value1: 'first' },
+      });
+      return response;
+    };
+
+    const middleware2: MiddlewareFunction = async ({ context, next }) => {
+      expect(context).toHaveProperty('value1', 'first');
+      const response = await next({
+        context: { value2: 'second' },
+      });
+      return response;
+    };
+
+    const GET = createZodRoute()
+      .use(middleware1)
+      .use(middleware2)
+      .handler((request: Request, context: { data: Record<string, unknown> }) => {
+        expect(context.data).toEqual({
+          value1: 'first',
+          value2: 'second',
+        });
+        return { success: true };
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ success: true });
+  });
+
+  it('should allow middleware to short-circuit the chain', async () => {
+    const authMiddleware: MiddlewareFunction = async ({ next }) => {
+      // Short circuit with error response
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      // This won't be called
+      await next();
+    };
+
+    const GET = createZodRoute()
+      .use(authMiddleware)
+      .handler(() => {
+        // This won't be called
+        return { success: true };
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(401);
+    expect(await response.json()).toEqual({ error: 'Unauthorized' });
+  });
+
+  it('should handle custom error thrown inside a middleware', async () => {
+    class CustomMiddlewareError extends Error {
+      constructor(message: string) {
+        super(message);
+        this.name = 'CustomMiddlewareError';
+      }
+    }
+
+    const errorMiddleware: MiddlewareFunction = async () => {
+      console.trace();
+      throw new CustomMiddlewareError('Middleware error occurred');
+    };
+
+    const handleServerError = (error: Error) => {
+      if (error instanceof CustomMiddlewareError) {
+        return new Response(JSON.stringify({ message: error.name, details: error.message }), { status: 400 });
+      }
+
+      return new Response(JSON.stringify({ message: 'Something went wrong' }), { status: 500 });
+    };
+
+    const GET = createZodRoute({
+      handleServerError,
+    })
+      .use(errorMiddleware)
+      .handler(() => {
+        return { success: true };
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data).toEqual({ message: 'CustomMiddlewareError', details: 'Middleware error occurred' });
   });
 });
