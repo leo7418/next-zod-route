@@ -457,3 +457,93 @@ describe('HTTP methods handling', () => {
     expect(data).toEqual({ success: true });
   });
 });
+
+describe('metadata validation', () => {
+  const metadataSchema = z.object({
+    permission: z.string(),
+    role: z.enum(['admin', 'user']),
+  });
+
+  it('should validate and handle valid metadata', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(metadataSchema)
+      .handler((request, context) => {
+        expectTypeOf(context.metadata).toEqualTypeOf<z.infer<typeof metadataSchema> | undefined>();
+        const { permission, role } = context.metadata!;
+        return Response.json({ permission, role }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: Promise.resolve({}),
+      metadata: { permission: 'read', role: 'admin' },
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ permission: 'read', role: 'admin' });
+  });
+
+  it('should return an error for invalid metadata', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(metadataSchema)
+      .handler((request, context) => {
+        const { permission, role } = context.metadata!;
+        return Response.json({ permission, role }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: Promise.resolve({}),
+      metadata: { permission: 'read', role: 'invalid-role' },
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(data.message).toBe('Invalid metadata');
+  });
+
+  it('should handle missing optional metadata', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(metadataSchema)
+      .handler((request, context) => {
+        expect(context.metadata).toBeUndefined();
+        return Response.json({ success: true }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ success: true });
+  });
+
+  it('should work with combined validation', async () => {
+    const GET = createZodRoute()
+      .params(paramsSchema)
+      .query(querySchema)
+      .defineMetadata(metadataSchema)
+      .handler((request, context) => {
+        const { id } = context.params;
+        const { search } = context.query;
+        const { permission, role } = context.metadata!;
+        return Response.json({ id, search, permission, role }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/?search=test');
+    const response = await GET(request, {
+      params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
+      metadata: { permission: 'read', role: 'admin' },
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      search: 'test',
+      permission: 'read',
+      role: 'admin',
+    });
+  });
+});

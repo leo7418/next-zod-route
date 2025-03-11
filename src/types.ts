@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Schema } from 'zod';
 
-export type HandlerFunction<TParams, TQuery, TBody, TContext> = (
+export type HandlerFunction<TParams, TQuery, TBody, TContext, TMetadata = unknown> = (
   request: Request,
-  context: { params: TParams; query: TQuery; body: TBody; data: TContext },
+  context: { params: TParams; query: TQuery; body: TBody; data: TContext; metadata?: TMetadata },
 ) => any;
 
 export interface RouteHandlerBuilderConfig {
@@ -12,6 +12,9 @@ export interface RouteHandlerBuilderConfig {
   bodySchema: Schema;
 }
 
-export type OriginalRouteHandler = (request: Request, context: { params: Promise<Record<string, unknown>> }) => any;
+export type OriginalRouteHandler = (
+  request: Request,
+  context: { params: Promise<Record<string, unknown>>; metadata?: unknown },
+) => any;
 
 export type HandlerServerErrorFn = (error: Error) => Response;

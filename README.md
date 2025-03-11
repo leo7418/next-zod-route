@@ -53,19 +53,21 @@ const bodySchema = z.object({
   field: z.string(),
 });
 
+const metadataSchema = z.object({
+  permission: z.string(),
+  role: z.enum(['admin', 'user']),
+});
+
 export const GET = createZodRoute()
   .params(paramsSchema)
   .query(querySchema)
+  .defineMetadata(metadataSchema)
   .handler((request, context) => {
-    // Next.js passes params as a promise, but next-zod-route unwraps it for you
     const { id } = context.params;
     const { search } = context.query;
+    const { permission, role } = context.metadata!;
 
-    // Return a Response object directly
-    return Response.json({ id, search }), { status: 200 };
-
-    // Or return a plain object that will be converted to a JSON response
-    // return { id, search };
+    return Response.json({ id, search, permission, role }), { status: 200 };
   });
 
 export const POST = createZodRoute()
@@ -85,9 +87,9 @@ export const POST = createZodRoute()
 To define a route handler in Next.js:
 
 1. Import `createZodRoute` and `zod`.
-2. Define validation schemas for params, query, and body as needed.
-3. Use `createZodRoute()` to create a route handler, chaining `params`, `query`, and `body` methods.
-4. Implement your handler function, accessing validated and type-safe params, query, and body through `context`.
+2. Define validation schemas for params, query, body, and metadata as needed.
+3. Use `createZodRoute()` to create a route handler, chaining `params`, `query`, `body`, and `defineMetadata` methods.
+4. Implement your handler function, accessing validated and type-safe params, query, body, and metadata through `context`.
 
 ## Supported Body Formats
 
@@ -116,6 +118,38 @@ return { data: 'value' };
 ```
 
 ## Advanced Usage
+
+### Metadata
+
+You can add metadata to your route handler with the `defineMetadata` method. Metadata is optional and can be used to add additional information to your route handler.
+
+```ts
+const metadataSchema = z.object({
+  permission: z.string(),
+  role: z.enum(['admin', 'user']),
+});
+
+export const GET = createZodRoute()
+  .defineMetadata(metadataSchema)
+  .handler((request, context) => {
+    // Access metadata from context.metadata
+    const { permission, role } = context.metadata!;
+
+    return Response.json({ permission, role });
+  });
+```
+
+When calling the route, you can pass metadata as part of the context:
+
+```ts
+// In your Next.js page/component
+const response = await GET(request, {
+  params: Promise.resolve({}),
+  metadata: { permission: 'read', role: 'admin' },
+});
+```
+
+Metadata is optional by default. If you define a metadata schema but don't provide metadata in the context, the handler will still work. If you provide metadata, it will be validated against the schema.
 
 ### Middleware
 
