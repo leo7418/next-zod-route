@@ -156,9 +156,14 @@ Metadata is optional by default. If you define a metadata schema but don't provi
 You can add middleware to your route handler with the `use` method. Middleware functions can add data to the context that will be available in your handler.
 
 ```ts
-const authMiddleware = async ({ request }) => {
+const authMiddleware = async ({ request, metadata }) => {
   // Get the token from the request headers
   const token = request.headers.get('authorization')?.split(' ')[1];
+
+  // You can access metadata in middleware
+  if (metadata?.role !== 'admin') {
+    throw new Error('Unauthorized');
+  }
 
   // Validate the token and get the user
   const user = await validateToken(token);
@@ -167,22 +172,37 @@ const authMiddleware = async ({ request }) => {
   return { user };
 };
 
-const permissionsMiddleware = async () => {
-  return { permissions: ['read', 'write'] };
+const permissionsMiddleware = async ({ metadata }) => {
+  // Metadata are optional and type-safe
+  return { permissions: metadata?.permissions ?? ['read'] };
 };
 
 export const GET = createZodRoute()
+  .defineMetadata(
+    z.object({
+      role: z.enum(['admin', 'user']),
+      permissions: z.array(z.string()).optional(),
+    }),
+  )
   .use(authMiddleware)
   .use(permissionsMiddleware)
   .handler((request, context) => {
     // Access middleware data from context.data
     const { user, permissions } = context.data;
+    // Access metadata from context.metadata
+    const { role } = context.metadata!;
 
-    return Response.json({ user, permissions });
+    return Response.json({ user, permissions, role });
   });
 ```
 
-Middleware functions should return an object. The returned object will be merged with the context's data property.
+Middleware functions receive:
+
+- `request`: The request object
+- `context`: The context object with data from previous middlewares
+- `metadata`: The validated metadata object (optional)
+
+The returned object will be merged with the context's data property.
 
 ### Custom Error Handler
 

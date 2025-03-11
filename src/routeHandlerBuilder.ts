@@ -3,16 +3,17 @@ import z from 'zod';
 
 import { HandlerFunction, HandlerServerErrorFn, OriginalRouteHandler } from './types';
 
-type Middleware<TContext = Record<string, unknown>, TReturnType = Record<string, unknown>> = (opts: {
-  request: Request;
-  context?: TContext;
-}) => Promise<TReturnType>;
+type Middleware<
+  TContext = Record<string, unknown>,
+  TReturnType = Record<string, unknown>,
+  TMetadata = unknown,
+> = (opts: { request: Request; context?: TContext; metadata?: TMetadata }) => Promise<TReturnType>;
 
 /**
  * Type of the middleware function passed to a safe action client.
  */
-export type MiddlewareFn<TContext, TReturnType> = {
-  (opts: { context: TContext; request: Request }): Promise<TReturnType>;
+export type MiddlewareFn<TContext, TReturnType, TMetadata = unknown> = {
+  (opts: { context: TContext; request: Request; metadata?: TMetadata }): Promise<TReturnType>;
 };
 
 export class InternalRouteHandlerError extends Error {}
@@ -31,7 +32,7 @@ export class RouteHandlerBuilder<
     bodySchema: TBody;
     metadataSchema?: TMetadata;
   };
-  readonly middlewares: Middleware<TContext, z.infer<TMetadata>>[];
+  readonly middlewares: Middleware<TContext, z.infer<TMetadata>, z.infer<TMetadata>>[];
   readonly handleServerError?: HandlerServerErrorFn;
   readonly metadataValue: z.infer<TMetadata>;
   readonly contextType!: TContext;
@@ -53,7 +54,7 @@ export class RouteHandlerBuilder<
       bodySchema: TBody;
       metadataSchema?: TMetadata;
     };
-    middlewares?: Middleware<TContext, z.infer<TMetadata>>[];
+    middlewares?: Middleware<TContext, z.infer<TMetadata>, z.infer<TMetadata>>[];
     handleServerError?: HandlerServerErrorFn;
     contextType: TContext;
   }) {
@@ -116,7 +117,7 @@ export class RouteHandlerBuilder<
    * @param middleware - The middleware function to be executed
    * @returns A new instance of the RouteHandlerBuilder
    */
-  use<TNewContext>(middleware: MiddlewareFn<TContext, TNewContext>) {
+  use<TNewContext>(middleware: MiddlewareFn<TContext, TNewContext, z.infer<TMetadata>>) {
     type MergedContext = TContext & TNewContext;
     return new RouteHandlerBuilder<TParams, TQuery, TBody, MergedContext, TMetadata>({
       ...this,
@@ -205,6 +206,7 @@ export class RouteHandlerBuilder<
           const result = await middleware({
             request,
             context: middlewareContext,
+            metadata,
           });
           middlewareContext = { ...middlewareContext, ...result };
         }

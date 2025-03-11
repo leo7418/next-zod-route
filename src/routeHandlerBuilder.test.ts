@@ -546,4 +546,112 @@ describe('metadata validation', () => {
       role: 'admin',
     });
   });
+
+  it('should pass metadata to middleware', async () => {
+    const middleware = async ({
+      metadata,
+    }: {
+      request: Request;
+      context: Record<string, unknown>;
+      metadata?: z.infer<typeof metadataSchema>;
+    }) => {
+      expect(metadata).toEqual({ permission: 'read', role: 'admin' });
+      return { authorized: true };
+    };
+
+    const GET = createZodRoute()
+      .defineMetadata(metadataSchema)
+      .use(middleware)
+      .handler((request, context) => {
+        const { authorized } = context.data;
+        const { permission, role } = context.metadata!;
+        return Response.json({ authorized, permission, role }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: Promise.resolve({}),
+      metadata: { permission: 'read', role: 'admin' },
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      authorized: true,
+      permission: 'read',
+      role: 'admin',
+    });
+  });
+
+  it('should handle undefined metadata in middleware', async () => {
+    const middleware = async ({
+      metadata,
+    }: {
+      request: Request;
+      context: Record<string, unknown>;
+      metadata?: z.infer<typeof metadataSchema>;
+    }) => {
+      expect(metadata).toBeUndefined();
+      return { authorized: false };
+    };
+
+    const GET = createZodRoute()
+      .defineMetadata(metadataSchema)
+      .use(middleware)
+      .handler((request, context) => {
+        const { authorized } = context.data;
+        return Response.json({ authorized }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ authorized: false });
+  });
+
+  it('should work with multiple middlewares accessing metadata', async () => {
+    const middleware1 = async ({
+      metadata,
+    }: {
+      request: Request;
+      context: Record<string, unknown>;
+      metadata?: z.infer<typeof metadataSchema>;
+    }) => {
+      return { hasPermission: metadata?.permission === 'read' };
+    };
+
+    const middleware2 = async ({
+      metadata,
+    }: {
+      request: Request;
+      context: { hasPermission: boolean };
+      metadata?: z.infer<typeof metadataSchema>;
+    }) => {
+      return { isAdmin: metadata?.role === 'admin' };
+    };
+
+    const GET = createZodRoute()
+      .defineMetadata(metadataSchema)
+      .use(middleware1)
+      .use(middleware2)
+      .handler((request, context) => {
+        const { hasPermission, isAdmin } = context.data;
+        return Response.json({ hasPermission, isAdmin }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: Promise.resolve({}),
+      metadata: { permission: 'read', role: 'admin' },
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      hasPermission: true,
+      isAdmin: true,
+    });
+  });
 });
