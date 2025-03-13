@@ -1,6 +1,7 @@
 ---
 description: EXPLAIN what is the project
 globs: 
+alwaysApply: true
 ---
 ## Context
 

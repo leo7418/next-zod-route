@@ -1,21 +1,21 @@
 // eslint-disable-next-line import/no-named-as-default
 import z from 'zod';
 
-import { HandlerFunction, HandlerServerErrorFn, OriginalRouteHandler } from './types';
-
-type Middleware<TContext = Record<string, unknown>, TReturnType = Record<string, unknown>> = (opts: {
-  request: Request;
-  context?: TContext;
-}) => Promise<TReturnType>;
+import { HandlerFunction, HandlerServerErrorFn, MiddlewareFunction, NextFunction, OriginalRouteHandler } from './types';
 
 /**
  * Type of the middleware function passed to a safe action client.
  */
-export type MiddlewareFn<TContext, TReturnType> = {
-  (opts: { context: TContext; request: Request }): Promise<TReturnType>;
+export type MiddlewareFn<TContext, TReturnType, TMetadata = unknown> = {
+  (opts: { context: TContext; request: Request; metadata?: TMetadata }): Promise<TReturnType>;
 };
 
-export class InternalRouteHandlerError extends Error {}
+export class InternalRouteHandlerError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InternalRouteHandlerError';
+  }
+}
 
 export class RouteHandlerBuilder<
   TParams extends z.Schema = z.Schema,
@@ -23,16 +23,17 @@ export class RouteHandlerBuilder<
   TBody extends z.Schema = z.Schema,
   // eslint-disable-next-line @typescript-eslint/ban-types
   TContext = {},
-  TMetadata = unknown,
+  TMetadata extends z.Schema = z.Schema,
 > {
   readonly config: {
     paramsSchema: TParams;
     querySchema: TQuery;
     bodySchema: TBody;
+    metadataSchema?: TMetadata;
   };
-  readonly middlewares: Middleware<TContext, TMetadata>[];
+  readonly middlewares: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
   readonly handleServerError?: HandlerServerErrorFn;
-  readonly metadataValue: TMetadata;
+  readonly metadataValue: z.infer<TMetadata>;
   readonly contextType!: TContext;
 
   constructor({
@@ -40,24 +41,29 @@ export class RouteHandlerBuilder<
       paramsSchema: undefined as unknown as TParams,
       querySchema: undefined as unknown as TQuery,
       bodySchema: undefined as unknown as TBody,
+      metadataSchema: undefined as unknown as TMetadata,
     },
     middlewares = [],
     handleServerError,
     contextType,
+    metadataValue,
   }: {
     config?: {
       paramsSchema: TParams;
       querySchema: TQuery;
       bodySchema: TBody;
+      metadataSchema?: TMetadata;
     };
-    middlewares?: Middleware<TContext, TMetadata>[];
+    middlewares?: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
     handleServerError?: HandlerServerErrorFn;
     contextType: TContext;
+    metadataValue?: z.infer<TMetadata>;
   }) {
     this.config = config;
     this.middlewares = middlewares;
     this.handleServerError = handleServerError;
     this.contextType = contextType as TContext;
+    this.metadataValue = metadataValue;
   }
 
   /**
@@ -97,12 +103,34 @@ export class RouteHandlerBuilder<
   }
 
   /**
+   * Define the schema for the metadata
+   * @param schema - The schema for the metadata
+   * @returns A new instance of the RouteHandlerBuilder
+   */
+  defineMetadata<T extends z.Schema>(schema: T) {
+    return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, T>({
+      ...this,
+      config: { ...this.config, metadataSchema: schema },
+    });
+  }
+
+  metadata(value: z.infer<TMetadata>) {
+    return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, TMetadata>({
+      ...this,
+      metadataValue: value,
+    });
+  }
+
+  /**
    * Add a middleware to the route handler
    * @param middleware - The middleware function to be executed
    * @returns A new instance of the RouteHandlerBuilder
    */
-  use<TNewContext>(middleware: MiddlewareFn<TContext, TNewContext>) {
+  use<TNewContext extends Record<string, unknown>>(
+    middleware: MiddlewareFunction<TContext, TNewContext, z.infer<TMetadata>>,
+  ): RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNewContext, TMetadata> {
     type MergedContext = TContext & TNewContext;
+
     return new RouteHandlerBuilder<TParams, TQuery, TBody, MergedContext, TMetadata>({
       ...this,
       middlewares: [...this.middlewares, middleware],
@@ -115,12 +143,15 @@ export class RouteHandlerBuilder<
    * @param handler - The handler function that will be called when the route is hit
    * @returns The original route handler that Next.js expects with the validation logic
    */
-  handler(handler: HandlerFunction<z.infer<TParams>, z.infer<TQuery>, z.infer<TBody>, TContext>): OriginalRouteHandler {
+  handler(
+    handler: HandlerFunction<z.infer<TParams>, z.infer<TQuery>, z.infer<TBody>, TContext, z.infer<TMetadata>>,
+  ): OriginalRouteHandler {
     return async (request, context): Promise<Response> => {
       try {
         const url = new URL(request.url);
         let params = context?.params ? await context.params : {};
         let query = Object.fromEntries(url.searchParams.entries());
+        let metadata = this.metadataValue;
 
         // Support both JSON and FormData parsing
         let body: unknown = {};
@@ -170,42 +201,85 @@ export class RouteHandlerBuilder<
           body = bodyResult.data;
         }
 
-        // Execute middlewares and build context
+        // Validate the metadata against the provided schema
+        if (this.config.metadataSchema && metadata !== undefined) {
+          const metadataResult = this.config.metadataSchema.safeParse(metadata);
+          if (!metadataResult.success) {
+            throw new InternalRouteHandlerError(
+              JSON.stringify({ message: 'Invalid metadata', errors: metadataResult.error.issues }),
+            );
+          }
+          metadata = metadataResult.data;
+        }
+
+        // Execute middleware chain
         let middlewareContext: TContext = {} as TContext;
-        for (const middleware of this.middlewares) {
-          const result = await middleware({
-            request,
-            context: middlewareContext,
-          });
-          middlewareContext = { ...middlewareContext, ...result };
-        }
 
-        // Call the handler function with the validated params, query, and body
-        const result = await handler(request, {
-          params: params as z.infer<TParams>,
-          query: query as z.infer<TQuery>,
-          body: body as z.infer<TBody>,
-          data: middlewareContext,
-        });
+        const executeMiddlewareChain = async (index: number): Promise<Response> => {
+          if (index >= this.middlewares.length) {
+            try {
+              const result = await handler(request, {
+                params: params as z.infer<TParams>,
+                query: query as z.infer<TQuery>,
+                body: body as z.infer<TBody>,
+                data: middlewareContext,
+                metadata: metadata as z.infer<TMetadata>,
+              });
 
-        // If the result is already a Response, return it
-        if (result instanceof Response) {
-          return result;
-        }
+              if (result instanceof Response) return result;
 
-        // Otherwise, return a new Response with the result (else NextJS will throw an error and nothing will be returned)
-        return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
+              return new Response(JSON.stringify(result), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            } catch (error) {
+              return handleError(error as Error, this.handleServerError);
+            }
+          }
+
+          const middleware = this.middlewares[index];
+          if (!middleware) return executeMiddlewareChain(index + 1);
+
+          const next: NextFunction = async (options = {}) => {
+            if (options.context) {
+              middlewareContext = { ...middlewareContext, ...options.context };
+            }
+            return executeMiddlewareChain(index + 1);
+          };
+
+          try {
+            const result = await middleware({
+              request,
+              context: middlewareContext,
+              metadata,
+              next,
+            });
+
+            if (result instanceof Response) return result;
+
+            middlewareContext = { ...middlewareContext, ...result };
+            return next();
+          } catch (error) {
+            return handleError(error as Error, this.handleServerError);
+          }
+        };
+
+        return executeMiddlewareChain(0);
       } catch (error) {
-        if (error instanceof InternalRouteHandlerError) {
-          return new Response(error.message, { status: 400 });
-        }
-
-        if (this.handleServerError) {
-          return this.handleServerError(error as Error);
-        }
-
-        return new Response(JSON.stringify({ message: 'Internal server error' }), { status: 500 });
+        return handleError(error as Error, this.handleServerError);
       }
     };
   }
 }
+
+const handleError = (error: Error, handleServerError?: HandlerServerErrorFn): Response => {
+  if (error instanceof InternalRouteHandlerError) {
+    return new Response(error.message, { status: 400 });
+  }
+
+  if (handleServerError) {
+    return handleServerError(error as Error);
+  }
+
+  return new Response(JSON.stringify({ message: 'Internal server error' }), { status: 500 });
+};
