@@ -817,3 +817,164 @@ describe('enhanced middleware functionality', () => {
     expect(data).toEqual({ message: 'CustomMiddlewareError', details: 'Middleware error occurred' });
   });
 });
+
+describe('permission checking with metadata', () => {
+  const permissionsMetadataSchema = z.object({
+    requiredPermissions: z.array(z.string()).optional(),
+  });
+
+  const permissionCheckMiddleware: MiddlewareFunction<
+    Record<string, unknown>,
+    { authorized: boolean },
+    z.infer<typeof permissionsMetadataSchema>
+  > = async ({ next, metadata, request }) => {
+    // Get user permissions from auth header (in a real app)
+    const userPermissions = request.headers.get('x-user-permissions')?.split(',') || [];
+
+    // If no required permissions in metadata, allow access
+    if (!metadata?.requiredPermissions || metadata.requiredPermissions.length === 0) {
+      return next({ context: { authorized: true } });
+    }
+
+    // Check if user has all required permissions
+    const hasAllPermissions = metadata.requiredPermissions.every((permission) => userPermissions.includes(permission));
+
+    if (!hasAllPermissions) {
+      // Short-circuit with 403 Forbidden response
+      return new Response(
+        JSON.stringify({
+          error: 'Forbidden',
+          message: 'You do not have the required permissions',
+        }),
+        {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        },
+      );
+    }
+
+    // Continue with authorized context
+    return next({ context: { authorized: true } });
+  };
+
+  it('should allow access when user has required permissions', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(permissionsMetadataSchema)
+      .use(permissionCheckMiddleware)
+      .metadata({ requiredPermissions: ['read:users'] })
+      .handler((request, context) => {
+        const { authorized } = context.data;
+        return Response.json({ success: true, authorized }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/', {
+      headers: {
+        'x-user-permissions': 'read:users,write:users',
+      },
+    });
+
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ success: true, authorized: true });
+  });
+
+  it('should deny access when user lacks required permissions', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(permissionsMetadataSchema)
+      .use(permissionCheckMiddleware)
+      .metadata({ requiredPermissions: ['admin:users'] })
+      .handler(() => {
+        // This handler should not be called
+        return Response.json({ success: true }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/', {
+      headers: {
+        'x-user-permissions': 'read:users,write:users',
+      },
+    });
+
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(data).toEqual({
+      error: 'Forbidden',
+      message: 'You do not have the required permissions',
+    });
+  });
+
+  it('should allow access when no permissions are required', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(permissionsMetadataSchema)
+      .use(permissionCheckMiddleware)
+      .metadata({ requiredPermissions: [] })
+      .handler((request, context) => {
+        const { authorized } = context.data;
+        return Response.json({ success: true, authorized }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ success: true, authorized: true });
+  });
+
+  it('should allow access when metadata is not provided', async () => {
+    const GET = createZodRoute()
+      .defineMetadata(permissionsMetadataSchema)
+      .use(permissionCheckMiddleware)
+      .handler((request, context) => {
+        const { authorized } = context.data;
+        return Response.json({ success: true, authorized }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ success: true, authorized: true });
+  });
+
+  it('should work with other middleware and validations', async () => {
+    const loggingMiddleware: MiddlewareFunction = async ({ next }) => {
+      const response = await next({ context: { logged: true } });
+      return response;
+    };
+
+    const GET = createZodRoute()
+      .defineMetadata(permissionsMetadataSchema)
+      .params(paramsSchema)
+      .use(loggingMiddleware)
+      .use(permissionCheckMiddleware)
+      .metadata({ requiredPermissions: ['read:users'] })
+      .handler((request, context) => {
+        const { id } = context.params;
+        const { authorized, logged } = context.data;
+        return Response.json({ id, authorized, logged }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/', {
+      headers: {
+        'x-user-permissions': 'read:users,write:users',
+      },
+    });
+
+    const response = await GET(request, {
+      params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
+    });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      authorized: true,
+      logged: true,
+    });
+  });
+});

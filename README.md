@@ -154,6 +154,89 @@ const response = await GET(request, {
 
 Metadata is optional by default. If you define a metadata schema but don't provide metadata in the context, the handler will still work. If you provide metadata, it will be validated against the schema.
 
+### Permission Checking with Metadata
+
+One powerful use case for metadata is defining required permissions for routes and checking them in middleware. This allows you to:
+
+1. Declare permissions statically at the route level
+2. Enforce permissions consistently across your application
+3. Keep authorization logic separate from your route handlers
+
+Here's how to implement permission-based authorization:
+
+```ts
+// Define a schema for permissions metadata
+const permissionsMetadataSchema = z.object({
+  requiredPermissions: z.array(z.string()).optional(),
+});
+
+// Create a middleware that checks permissions
+const permissionCheckMiddleware = async ({ next, metadata, request }) => {
+  // Get user permissions from auth header, token, or session
+  const userPermissions = getUserPermissions(request);
+
+  // If no required permissions in metadata, allow access
+  if (!metadata?.requiredPermissions || metadata.requiredPermissions.length === 0) {
+    return next({ context: { authorized: true } });
+  }
+
+  // Check if user has all required permissions
+  const hasAllPermissions = metadata.requiredPermissions.every((permission) => userPermissions.includes(permission));
+
+  if (!hasAllPermissions) {
+    // Short-circuit with 403 Forbidden response
+    return new Response(
+      JSON.stringify({
+        error: 'Forbidden',
+        message: 'You do not have the required permissions',
+      }),
+      {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  }
+
+  // Continue with authorized context
+  return next({ context: { authorized: true } });
+};
+
+// Use in your route handlers
+export const GET = createZodRoute()
+  .defineMetadata(permissionsMetadataSchema)
+  .use(permissionCheckMiddleware)
+  .metadata({ requiredPermissions: ['read:users'] })
+  .handler((request, context) => {
+    // Only executed if user has 'read:users' permission
+    return Response.json({ data: 'Protected data' });
+  });
+
+export const POST = createZodRoute()
+  .defineMetadata(permissionsMetadataSchema)
+  .use(permissionCheckMiddleware)
+  .metadata({ requiredPermissions: ['write:users'] })
+  .handler((request, context) => {
+    // Only executed if user has 'write:users' permission
+    return Response.json({ success: true });
+  });
+
+export const DELETE = createZodRoute()
+  .defineMetadata(permissionsMetadataSchema)
+  .use(permissionCheckMiddleware)
+  .metadata({ requiredPermissions: ['admin:users'] })
+  .handler((request, context) => {
+    // Only executed if user has 'admin:users' permission
+    return Response.json({ success: true });
+  });
+```
+
+This pattern allows you to:
+
+- Clearly document required permissions for each route
+- Apply consistent authorization logic across your application
+- Skip permission checks for public routes by not specifying required permissions
+- Combine with other middleware for comprehensive request processing
+
 ### Middleware
 
 You can add middleware to your route handler with the `use` method. Middleware functions can add data to the context that will be available in your handler.
@@ -165,7 +248,7 @@ const loggingMiddleware = async ({ next }) => {
 
   const response = await next();
 
-  const endTime = performance.now();
+  const endTime = performance.now() - start;
   console.log(`After handler - took ${Math.round(endTime - startTime)}ms`);
 
   return response;

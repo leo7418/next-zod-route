@@ -135,7 +135,67 @@ const authMiddleware = async ({ next }) => {
 };
 ```
 
-#### 5. Metadata Access
+#### 5. Metadata example for permissions
+
+A powerful pattern is using metadata to define required permissions for routes and checking them in middleware:
+
+```typescript
+// Define a schema for permissions metadata
+const permissionsMetadataSchema = z.object({
+  requiredPermissions: z.array(z.string()).optional(),
+});
+
+// Create a middleware that checks permissions
+const permissionCheckMiddleware = async ({ next, metadata, request }) => {
+  // Get user permissions from auth header, token, or session
+  const token = request.headers.get('authorization')?.split(' ')[1];
+  const userPermissions = await getUserPermissionsFromToken(token);
+
+  // If no required permissions in metadata, allow access
+  if (!metadata?.requiredPermissions || metadata.requiredPermissions.length === 0) {
+    return next({ context: { authorized: true } });
+  }
+
+  // Check if user has all required permissions
+  const hasAllPermissions = metadata.requiredPermissions.every((permission) => userPermissions.includes(permission));
+
+  if (!hasAllPermissions) {
+    // Short-circuit with 403 Forbidden response
+    return new Response(
+      JSON.stringify({
+        error: 'Forbidden',
+        message: 'You do not have the required permissions',
+      }),
+      {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      },
+    );
+  }
+
+  // Continue with authorized context
+  return next({ context: { authorized: true } });
+};
+
+// Use in your route handlers
+const route = createZodRoute()
+  .defineMetadata(permissionsMetadataSchema)
+  .use(permissionCheckMiddleware)
+  .metadata({ requiredPermissions: ['read:users'] })
+  .handler((request, context) => {
+    // Only executed if user has 'read:users' permission
+    return Response.json({ data: 'Protected data' });
+  });
+```
+
+This pattern allows you to:
+
+- Declare permissions statically at the route level
+- Enforce permissions consistently across your application
+- Skip permission checks for public routes by not specifying required permissions
+- Short-circuit the request with an appropriate error response when permissions are missing
+
+#### 6. Metadata Access
 
 ```typescript
 const metadataMiddleware = async ({ metadata, next }) => {
@@ -165,7 +225,7 @@ const route = createZodRoute()
   });
 ```
 
-#### 6. Error Handling
+#### 7. Error Handling
 
 ```typescript
 const errorHandlingMiddleware = async ({ next }) => {
