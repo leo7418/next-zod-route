@@ -12,9 +12,6 @@ export interface RouteHandlerBuilderConfig {
   bodySchema: Schema;
 }
 
-export type OriginalRouteHandler = (
-  request: Request,
-  context: { params: Promise<Record<string, unknown>>; metadata?: unknown },
-) => any;
+export type OriginalRouteHandler = (request: Request, context: { params: Promise<Record<string, unknown>> }) => any;
 
 export type HandlerServerErrorFn = (error: Error) => Response;

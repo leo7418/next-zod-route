@@ -467,6 +467,7 @@ describe('metadata validation', () => {
   it('should validate and handle valid metadata', async () => {
     const GET = createZodRoute()
       .defineMetadata(metadataSchema)
+      .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
         expectTypeOf(context.metadata).toEqualTypeOf<z.infer<typeof metadataSchema> | undefined>();
         const { permission, role } = context.metadata!;
@@ -476,7 +477,6 @@ describe('metadata validation', () => {
     const request = new Request('http://localhost/');
     const response = await GET(request, {
       params: Promise.resolve({}),
-      metadata: { permission: 'read', role: 'admin' },
     });
     const data = await response.json();
 
@@ -487,6 +487,8 @@ describe('metadata validation', () => {
   it('should return an error for invalid metadata', async () => {
     const GET = createZodRoute()
       .defineMetadata(metadataSchema)
+      // @ts-expect-error - invalid role
+      .metadata({ permission: 'read', role: 'invalid-role' })
       .handler((request, context) => {
         const { permission, role } = context.metadata!;
         return Response.json({ permission, role }, { status: 200 });
@@ -495,7 +497,6 @@ describe('metadata validation', () => {
     const request = new Request('http://localhost/');
     const response = await GET(request, {
       params: Promise.resolve({}),
-      metadata: { permission: 'read', role: 'invalid-role' },
     });
     const data = await response.json();
 
@@ -524,6 +525,7 @@ describe('metadata validation', () => {
       .params(paramsSchema)
       .query(querySchema)
       .defineMetadata(metadataSchema)
+      .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
         const { id } = context.params;
         const { search } = context.query;
@@ -534,7 +536,6 @@ describe('metadata validation', () => {
     const request = new Request('http://localhost/?search=test');
     const response = await GET(request, {
       params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
-      metadata: { permission: 'read', role: 'admin' },
     });
     const data = await response.json();
 
@@ -562,6 +563,7 @@ describe('metadata validation', () => {
     const GET = createZodRoute()
       .defineMetadata(metadataSchema)
       .use(middleware)
+      .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
         const { authorized } = context.data;
         const { permission, role } = context.metadata!;
@@ -571,7 +573,6 @@ describe('metadata validation', () => {
     const request = new Request('http://localhost/');
     const response = await GET(request, {
       params: Promise.resolve({}),
-      metadata: { permission: 'read', role: 'admin' },
     });
     const data = await response.json();
 
@@ -629,6 +630,7 @@ describe('metadata validation', () => {
       context: { hasPermission: boolean };
       metadata?: z.infer<typeof metadataSchema>;
     }) => {
+      console.log({ metadata });
       return { isAdmin: metadata?.role === 'admin' };
     };
 
@@ -636,6 +638,7 @@ describe('metadata validation', () => {
       .defineMetadata(metadataSchema)
       .use(middleware1)
       .use(middleware2)
+      .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
         const { hasPermission, isAdmin } = context.data;
         return Response.json({ hasPermission, isAdmin }, { status: 200 });
@@ -644,7 +647,6 @@ describe('metadata validation', () => {
     const request = new Request('http://localhost/');
     const response = await GET(request, {
       params: Promise.resolve({}),
-      metadata: { permission: 'read', role: 'admin' },
     });
     const data = await response.json();
 

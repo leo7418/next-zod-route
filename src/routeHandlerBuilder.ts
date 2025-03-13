@@ -47,6 +47,7 @@ export class RouteHandlerBuilder<
     middlewares = [],
     handleServerError,
     contextType,
+    metadataValue,
   }: {
     config?: {
       paramsSchema: TParams;
@@ -57,11 +58,13 @@ export class RouteHandlerBuilder<
     middlewares?: Middleware<TContext, z.infer<TMetadata>, z.infer<TMetadata>>[];
     handleServerError?: HandlerServerErrorFn;
     contextType: TContext;
+    metadataValue?: z.infer<TMetadata>;
   }) {
     this.config = config;
     this.middlewares = middlewares;
     this.handleServerError = handleServerError;
     this.contextType = contextType as TContext;
+    this.metadataValue = metadataValue;
   }
 
   /**
@@ -112,6 +115,13 @@ export class RouteHandlerBuilder<
     });
   }
 
+  metadata(value: z.infer<TMetadata>) {
+    return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, TMetadata>({
+      ...this,
+      metadataValue: value,
+    });
+  }
+
   /**
    * Add a middleware to the route handler
    * @param middleware - The middleware function to be executed
@@ -139,7 +149,8 @@ export class RouteHandlerBuilder<
         const url = new URL(request.url);
         let params = context?.params ? await context.params : {};
         let query = Object.fromEntries(url.searchParams.entries());
-        let metadata = context?.metadata;
+        let metadata = this.metadataValue;
+        console.log({ metadata });
 
         // Support both JSON and FormData parsing
         let body: unknown = {};
