@@ -152,7 +152,6 @@ export class RouteHandlerBuilder<
         let params = context?.params ? await context.params : {};
         let query = Object.fromEntries(url.searchParams.entries());
         let metadata = this.metadataValue;
-        console.log({ metadata });
 
         // Support both JSON and FormData parsing
         let body: unknown = {};
@@ -234,7 +233,6 @@ export class RouteHandlerBuilder<
                 headers: { 'Content-Type': 'application/json' },
               });
             } catch (error) {
-              console.log('Error', error);
               return handleError(error as Error, this.handleServerError);
             }
           }
