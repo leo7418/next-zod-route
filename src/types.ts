@@ -19,7 +19,7 @@ export type MiddlewareContext<TContext, TNewContext> = TContext & TNewContext;
  * @returns Promise resolving to the response from the next middleware or handler
  */
 export type NextFunction<TContext> = {
-  <NC extends object = {}>(opts?: { context?: NC }): Promise<MiddlewareResult<NC & TContext>>;
+  <NC extends object = {}>(opts?: { ctx?: NC }): Promise<MiddlewareResult<NC & TContext>>;
 };
 
 /**

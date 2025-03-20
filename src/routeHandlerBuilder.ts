@@ -248,8 +248,8 @@ export class RouteHandlerBuilder<
           if (!middleware) return executeMiddlewareChain(index + 1);
 
           const next: NextFunction<TContext> = async (options = {}) => {
-            if (options.context) {
-              middlewareContext = { ...middlewareContext, ...options.context };
+            if (options.ctx) {
+              middlewareContext = { ...middlewareContext, ...options.ctx };
             }
             const result = await executeMiddlewareChain(index + 1);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

@@ -240,7 +240,7 @@ describe('combined validation', () => {
     const middleware: MiddlewareFunction<Record<string, unknown>, { user: { id: string; role: string } }> = async ({
       next,
     }) => {
-      const result = await next({ context: { user: { id: 'user-123', role: 'admin' } } });
+      const result = await next({ ctx: { user: { id: 'user-123', role: 'admin' } } });
       return result;
     };
 
@@ -270,14 +270,14 @@ describe('combined validation', () => {
   it('should execute multiple middlewares and merge context properties', async () => {
     const GET = createZodRoute()
       .use(async ({ next }) => {
-        const result = await next({ context: { user: { id: 'user-123' } } });
+        const result = await next({ ctx: { user: { id: 'user-123' } } });
         return result;
       })
       .use(async ({ next, ctx }) => {
         const user = ctx.user;
         expectTypeOf(user).toMatchTypeOf<{ id: string }>();
 
-        const result = await next({ context: { permissions: ['read', 'write'] } });
+        const result = await next({ ctx: { permissions: ['read', 'write'] } });
 
         return result;
       })
@@ -562,7 +562,7 @@ describe('metadata validation', () => {
       .defineMetadata(metadataSchema)
       .use(async ({ next, metadata }) => {
         expect(metadata).toEqual({ permission: 'read', role: 'admin' });
-        const result = await next({ context: { authorized: true } });
+        const result = await next({ ctx: { authorized: true } });
         return result;
       })
       .metadata({ permission: 'read', role: 'admin' })
@@ -591,7 +591,7 @@ describe('metadata validation', () => {
       .defineMetadata(metadataSchema)
       .use(async ({ next, metadata }) => {
         expect(metadata).toBeUndefined();
-        const result = await next({ context: { authorized: false } });
+        const result = await next({ ctx: { authorized: false } });
         return result;
       })
       .handler((request, context) => {
@@ -611,11 +611,11 @@ describe('metadata validation', () => {
     const GET = createZodRoute()
       .defineMetadata(metadataSchema)
       .use(async ({ next, metadata }) => {
-        const result = await next({ context: { hasPermission: metadata?.permission === 'read' } });
+        const result = await next({ ctx: { hasPermission: metadata?.permission === 'read' } });
         return result;
       })
       .use(async ({ next, metadata }) => {
-        const result = await next({ context: { isAdmin: metadata?.role === 'admin' } });
+        const result = await next({ ctx: { isAdmin: metadata?.role === 'admin' } });
         return result;
       })
       .metadata({ permission: 'read', role: 'admin' })
@@ -699,14 +699,14 @@ describe('enhanced middleware functionality', () => {
     const GET = createZodRoute()
       .use(async ({ next }) => {
         const response = await next({
-          context: { value1: 'first' },
+          ctx: { value1: 'first' },
         });
         return response;
       })
       .use(async ({ ctx, next }) => {
         expect(ctx).toHaveProperty('value1', 'first');
         const response = await next({
-          context: { value2: 'second' },
+          ctx: { value2: 'second' },
         });
         return response;
       })
@@ -799,7 +799,7 @@ describe('permission checking with metadata', () => {
 
     // If no required permissions in metadata, allow access
     if (!metadata?.requiredPermissions || metadata.requiredPermissions.length === 0) {
-      return next({ context: { authorized: true } });
+      return next({ ctx: { authorized: true } });
     }
 
     // Check if user has all required permissions
@@ -820,7 +820,7 @@ describe('permission checking with metadata', () => {
     }
 
     // Continue with authorized context
-    return next({ context: { authorized: true } });
+    return next({ ctx: { authorized: true } });
   };
 
   it('should allow access when user has required permissions', async () => {
@@ -909,7 +909,7 @@ describe('permission checking with metadata', () => {
 
   it('should work with other middleware and validations', async () => {
     const loggingMiddleware: MiddlewareFunction = async ({ next }) => {
-      const response = await next({ context: { logged: true } });
+      const response = await next({ ctx: { logged: true } });
       return response;
     };
 
