@@ -3,6 +3,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Schema } from 'zod';
 
+/**
+ * Function that is called when the route handler is executed and all the middleware has been executed
+ * @param request - The request object
+ * @param context - The context object
+ * @returns The response from the route handler
+ */
 export type HandlerFunction<TParams, TQuery, TBody, TContext, TMetadata = unknown> = (
   request: Request,
   context: { params: TParams; query: TQuery; body: TBody; ctx: TContext; metadata?: TMetadata },
@@ -54,12 +60,27 @@ export type MiddlewareFunction<
 // This context is not really used and not really needed
 export type MiddlewareResult<TContext> = Response & { ctx?: TContext };
 
+/**
+ * Configuration object for the RouteHandlerBuilder
+ * @param paramsSchema - Schema for the route parameters
+ * @param querySchema - Schema for the route query parameters
+ * @param bodySchema - Schema for the route body
+ */
 export interface RouteHandlerBuilderConfig {
   paramsSchema: Schema;
   querySchema: Schema;
   bodySchema: Schema;
 }
 
+/**
+ * Original Next.js route handler type for reference
+ * This is the type that Next.js uses internally before our library wraps it
+ */
 export type OriginalRouteHandler = (request: Request, context: { params: Promise<Record<string, unknown>> }) => any;
 
+/**
+ * Function that handles server errors in route handlers
+ * @param error - The error that was thrown
+ * @returns Response object with appropriate error details and status code
+ */
 export type HandlerServerErrorFn = (error: Error) => Response;
