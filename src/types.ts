@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/ban-types */
+
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Schema } from 'zod';
 
@@ -16,7 +18,9 @@ export type MiddlewareContext<TContext, TNewContext> = TContext & TNewContext;
  * @param options - Optional configuration object
  * @returns Promise resolving to the response from the next middleware or handler
  */
-export type NextFunction = (options?: { context?: Record<string, unknown> }) => Promise<Response>;
+export type NextFunction<TContext> = {
+  <NC extends object = {}>(opts?: { context?: NC }): Promise<MiddlewareResult<NC & TContext>>;
+};
 
 /**
  * Middleware function that can:
@@ -36,14 +40,19 @@ export type NextFunction = (options?: { context?: Record<string, unknown> }) => 
  */
 export type MiddlewareFunction<
   TContext = Record<string, unknown>,
-  TNewContext = Record<string, unknown>,
+  TNextContext = Record<string, unknown>,
   TMetadata = unknown,
 > = (opts: {
   request: Request;
   context: TContext;
   metadata?: TMetadata;
-  next: NextFunction;
-}) => Promise<TNewContext | Response>;
+  next: NextFunction<TContext>;
+}) => Promise<MiddlewareResult<TNextContext>>;
+
+// Middleware should return a Response
+// But in order to infer the context, we extends the response with the context
+// This context is not really used and not really needed
+export type MiddlewareResult<TContext> = Response & { context?: TContext };
 
 export interface RouteHandlerBuilderConfig {
   paramsSchema: Schema;

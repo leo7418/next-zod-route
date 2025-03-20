@@ -1,7 +1,14 @@
 // eslint-disable-next-line import/no-named-as-default
 import z from 'zod';
 
-import { HandlerFunction, HandlerServerErrorFn, MiddlewareFunction, NextFunction, OriginalRouteHandler } from './types';
+import {
+  HandlerFunction,
+  HandlerServerErrorFn,
+  MiddlewareFunction,
+  MiddlewareResult,
+  NextFunction,
+  OriginalRouteHandler,
+} from './types';
 
 /**
  * Type of the middleware function passed to a safe action client.
@@ -126,10 +133,10 @@ export class RouteHandlerBuilder<
    * @param middleware - The middleware function to be executed
    * @returns A new instance of the RouteHandlerBuilder
    */
-  use<TNewContext extends Record<string, unknown>>(
-    middleware: MiddlewareFunction<TContext, TNewContext, z.infer<TMetadata>>,
-  ): RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNewContext, TMetadata> {
-    type MergedContext = TContext & TNewContext;
+  use<TNestContext extends Record<string, unknown>>(
+    middleware: MiddlewareFunction<TContext, TNestContext & TContext, z.infer<TMetadata>>,
+  ): RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNestContext, TMetadata> {
+    type MergedContext = TContext & TNestContext;
 
     return new RouteHandlerBuilder<TParams, TQuery, TBody, MergedContext, TMetadata>({
       ...this,
@@ -240,11 +247,13 @@ export class RouteHandlerBuilder<
           const middleware = this.middlewares[index];
           if (!middleware) return executeMiddlewareChain(index + 1);
 
-          const next: NextFunction = async (options = {}) => {
+          const next: NextFunction<TContext> = async (options = {}) => {
             if (options.context) {
               middlewareContext = { ...middlewareContext, ...options.context };
             }
-            return executeMiddlewareChain(index + 1);
+            const result = await executeMiddlewareChain(index + 1);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            return result as MiddlewareResult<any>;
           };
 
           try {
@@ -257,8 +266,8 @@ export class RouteHandlerBuilder<
 
             if (result instanceof Response) return result;
 
-            middlewareContext = { ...middlewareContext, ...result };
-            return next();
+            middlewareContext = { ...middlewareContext };
+            return result;
           } catch (error) {
             return handleError(error as Error, this.handleServerError);
           }
