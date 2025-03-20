@@ -1,6 +1,6 @@
 {
   "name": "next-zod-route",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "A zod way to define route handlers in Next.js",
   "keywords": [
     "next",
@@ -41,7 +41,9 @@
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",
     "lint": "tsc --noEmit && eslint .",
     "lint-staged": "lint-staged",
+    "pre:publish": "pnpm build",
     "prepare": "husky",
+    "publish": "pnpm build && pnpm publish",
     "release": "release-it",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

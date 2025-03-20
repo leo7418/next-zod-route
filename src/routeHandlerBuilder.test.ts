@@ -249,7 +249,7 @@ describe('combined validation', () => {
       .params(paramsSchema)
       .handler((request, context) => {
         const { id } = context.params;
-        const { user } = context.data;
+        const { user } = context.ctx;
 
         expectTypeOf(user).toMatchTypeOf<{ id: string }>();
 
@@ -273,8 +273,8 @@ describe('combined validation', () => {
         const result = await next({ context: { user: { id: 'user-123' } } });
         return result;
       })
-      .use(async ({ next, context }) => {
-        const user = context.user;
+      .use(async ({ next, ctx }) => {
+        const user = ctx.user;
         expectTypeOf(user).toMatchTypeOf<{ id: string }>();
 
         const result = await next({ context: { permissions: ['read', 'write'] } });
@@ -284,7 +284,7 @@ describe('combined validation', () => {
       .params(paramsSchema)
       .handler((request, context) => {
         const { id } = context.params;
-        const { user, permissions } = context.data;
+        const { user, permissions } = context.ctx;
 
         // Context should be automatically typed without explicit type
         expectTypeOf(user).toMatchTypeOf<{ id: string }>();
@@ -567,7 +567,7 @@ describe('metadata validation', () => {
       })
       .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
-        const { authorized } = context.data;
+        const { authorized } = context.ctx;
         const { permission, role } = context.metadata!;
         return Response.json({ authorized, permission, role }, { status: 200 });
       });
@@ -595,7 +595,7 @@ describe('metadata validation', () => {
         return result;
       })
       .handler((request, context) => {
-        const { authorized } = context.data;
+        const { authorized } = context.ctx;
         return Response.json({ authorized }, { status: 200 });
       });
 
@@ -620,7 +620,7 @@ describe('metadata validation', () => {
       })
       .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
-        const { hasPermission, isAdmin } = context.data;
+        const { hasPermission, isAdmin } = context.ctx;
         return Response.json({ hasPermission, isAdmin }, { status: 200 });
       });
 
@@ -703,15 +703,15 @@ describe('enhanced middleware functionality', () => {
         });
         return response;
       })
-      .use(async ({ context, next }) => {
-        expect(context).toHaveProperty('value1', 'first');
+      .use(async ({ ctx, next }) => {
+        expect(ctx).toHaveProperty('value1', 'first');
         const response = await next({
           context: { value2: 'second' },
         });
         return response;
       })
-      .handler((request: Request, context: { data: Record<string, unknown> }) => {
-        expect(context.data).toEqual({
+      .handler((request: Request, context) => {
+        expect(context.ctx).toEqual({
           value1: 'first',
           value2: 'second',
         });
@@ -829,7 +829,7 @@ describe('permission checking with metadata', () => {
       .use(permissionCheckMiddleware)
       .metadata({ requiredPermissions: ['read:users'] })
       .handler((request, context) => {
-        const { authorized } = context.data;
+        const { authorized } = context.ctx;
         return Response.json({ success: true, authorized }, { status: 200 });
       });
 
@@ -878,7 +878,7 @@ describe('permission checking with metadata', () => {
       .use(permissionCheckMiddleware)
       .metadata({ requiredPermissions: [] })
       .handler((request, context) => {
-        const { authorized } = context.data;
+        const { authorized } = context.ctx;
         return Response.json({ success: true, authorized }, { status: 200 });
       });
 
@@ -895,7 +895,7 @@ describe('permission checking with metadata', () => {
       .defineMetadata(permissionsMetadataSchema)
       .use(permissionCheckMiddleware)
       .handler((request, context) => {
-        const { authorized } = context.data;
+        const { authorized } = context.ctx;
         return Response.json({ success: true, authorized }, { status: 200 });
       });
 
@@ -921,7 +921,7 @@ describe('permission checking with metadata', () => {
       .metadata({ requiredPermissions: ['read:users'] })
       .handler((request, context) => {
         const { id } = context.params;
-        const { authorized, logged } = context.data;
+        const { authorized, logged } = context.ctx;
         return Response.json({ id, authorized, logged }, { status: 200 });
       });
 

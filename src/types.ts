@@ -5,7 +5,7 @@ import { Schema } from 'zod';
 
 export type HandlerFunction<TParams, TQuery, TBody, TContext, TMetadata = unknown> = (
   request: Request,
-  context: { params: TParams; query: TQuery; body: TBody; data: TContext; metadata?: TMetadata },
+  context: { params: TParams; query: TQuery; body: TBody; ctx: TContext; metadata?: TMetadata },
 ) => any;
 
 /**
@@ -44,7 +44,7 @@ export type MiddlewareFunction<
   TMetadata = unknown,
 > = (opts: {
   request: Request;
-  context: TContext;
+  ctx: TContext;
   metadata?: TMetadata;
   next: NextFunction<TContext>;
 }) => Promise<MiddlewareResult<TNextContext>>;
@@ -52,7 +52,7 @@ export type MiddlewareFunction<
 // Middleware should return a Response
 // But in order to infer the context, we extends the response with the context
 // This context is not really used and not really needed
-export type MiddlewareResult<TContext> = Response & { context?: TContext };
+export type MiddlewareResult<TContext> = Response & { ctx?: TContext };
 
 export interface RouteHandlerBuilderConfig {
   paramsSchema: Schema;

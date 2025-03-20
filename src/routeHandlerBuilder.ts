@@ -229,7 +229,7 @@ export class RouteHandlerBuilder<
                 params: params as z.infer<TParams>,
                 query: query as z.infer<TQuery>,
                 body: body as z.infer<TBody>,
-                data: middlewareContext,
+                ctx: middlewareContext,
                 metadata: metadata as z.infer<TMetadata>,
               });
 
@@ -259,7 +259,7 @@ export class RouteHandlerBuilder<
           try {
             const result = await middleware({
               request,
-              context: middlewareContext,
+              ctx: middlewareContext,
               metadata,
               next,
             });
