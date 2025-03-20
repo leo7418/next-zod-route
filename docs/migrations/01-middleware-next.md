@@ -16,11 +16,11 @@ Version 0.2.0 introduces a completely revamped middleware system that provides m
 1. Middleware must now accept an object with:
 
    - `request`: The incoming request
-   - `context`: Current context from previous middleware
+   - `ctx`: Current context from previous middleware
    - `metadata`: Optional route metadata (type-safe)
    - `next`: Function to continue the chain
 
-2. Context is now passed explicitly via `next({ context: {...} })`
+2. Context is now passed explicitly via `next({ ctx: {...} })`
 
 3. Middleware can return:
    - A Response object to short-circuit
@@ -39,8 +39,8 @@ const authMiddleware = async () => {
 
 const route = createZodRoute()
   .use(authMiddleware)
-  .handler((req, ctx) => {
-    const { user } = ctx.data;
+  .handler((req, { ctx }) => {
+    const { user } = ctx;
     return { data: user.id };
   });
 ```
@@ -50,15 +50,15 @@ const route = createZodRoute()
 ```typescript
 const authMiddleware = async ({ next }) => {
   const response = await next({
-    context: { user: { id: 'user-123' } },
+    ctx: { user: { id: 'user-123' } },
   });
   return response;
 };
 
 const route = createZodRoute()
   .use(authMiddleware)
-  .handler((req, ctx) => {
-    const { user } = ctx.data;
+  .handler((req, { ctx }) => {
+    const { user } = ctx;
     return { data: user.id };
   });
 ```
@@ -102,7 +102,7 @@ const headerMiddleware = async ({ next }) => {
 ```typescript
 const middleware1 = async ({ next }) => {
   const response = await next({
-    context: { value1: 'first' },
+    ctx: { value1: 'first' },
   });
   return response;
 };
@@ -112,7 +112,7 @@ const middleware2 = async ({ context, next }) => {
   console.log(context.value1); // 'first'
 
   const response = await next({
-    context: { value2: 'second' },
+    ctx: { value2: 'second' },
   });
   return response;
 };
@@ -153,7 +153,7 @@ const permissionCheckMiddleware = async ({ next, metadata, request }) => {
 
   // If no required permissions in metadata, allow access
   if (!metadata?.requiredPermissions || metadata.requiredPermissions.length === 0) {
-    return next({ context: { authorized: true } });
+    return next({ ctx: { authorized: true } });
   }
 
   // Check if user has all required permissions
@@ -174,7 +174,7 @@ const permissionCheckMiddleware = async ({ next, metadata, request }) => {
   }
 
   // Continue with authorized context
-  return next({ context: { authorized: true } });
+  return next({ ctx: { authorized: true } });
 };
 
 // Use in your route handlers
@@ -208,7 +208,7 @@ const middleware = async () => {
 // After
 const middleware = async ({ request, next }) => {
   const token = request.headers.get('authorization');
-  return next({ context: { token } });
+  return next({ ctx: { token } });
 };
 ```
 
@@ -221,11 +221,11 @@ const middleware2 = async () => ({ value2: 'second' });
 
 // After
 const middleware1 = async ({ next }) => {
-  return next({ context: { value1: 'first' } });
+  return next({ ctx: { value1: 'first' } });
 };
 const middleware2 = async ({ context, next }) => {
   return next({
-    context: {
+    ctx: {
       ...context,
       value2: 'second'
     }
@@ -243,7 +243,7 @@ const middleware = async () => {
 
 // After
 const middleware = async ({ next }) => {
-  const response = await next({ context: { transform: true } });
+  const response = await next({ ctx: { transform: true } });
 
   // Now you can transform the response
   const data = await response.json();

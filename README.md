@@ -122,39 +122,9 @@ return { data: 'value' };
 
 ## Advanced Usage
 
-### Metadata
+### Static Parameters with Metadata
 
-You can add metadata to your route handler with the `defineMetadata` method. Metadata is optional and can be used to add additional information to your route handler.
-
-```ts
-const metadataSchema = z.object({
-  permission: z.string(),
-  role: z.enum(['admin', 'user']),
-});
-
-export const GET = createZodRoute()
-  .defineMetadata(metadataSchema)
-  .handler((request, context) => {
-    // Access metadata from context.metadata
-    const { permission, role } = context.metadata!;
-
-    return Response.json({ permission, role });
-  });
-```
-
-When calling the route, you can pass metadata as part of the context:
-
-```ts
-// In your Next.js page/component
-const response = await GET(request, {
-  params: Promise.resolve({}),
-  metadata: { permission: 'read', role: 'admin' },
-});
-```
-
-Metadata is optional by default. If you define a metadata schema but don't provide metadata in the context, the handler will still work. If you provide metadata, it will be validated against the schema.
-
-### Permission Checking with Metadata
+Metadata enable you to add **static parameters** to the route, for example to give permissions list to our application.
 
 One powerful use case for metadata is defining required permissions for routes and checking them in middleware. This allows you to:
 

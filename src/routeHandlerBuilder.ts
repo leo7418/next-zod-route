@@ -121,6 +121,11 @@ export class RouteHandlerBuilder<
     });
   }
 
+  /**
+   * Set the metadata value for the route handler
+   * @param value - The metadata value that will be passed to middlewares
+   * @returns A new instance of the RouteHandlerBuilder
+   */
   metadata(value: z.infer<TMetadata>) {
     return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, TMetadata>({
       ...this,
