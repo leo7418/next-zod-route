@@ -129,6 +129,42 @@ describe('body validation', () => {
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid body');
   });
+
+  it('should not error when body schema is defined but no body is sent in POST request', async () => {
+    const POST = createZodRoute()
+      .body(bodySchema)
+      .handler(() => {
+        // If we reach here, it means no validation error was thrown
+        return Response.json({ success: true }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      // No body provided intentionally
+    });
+    const response = await POST(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(400); // Should fail with 400 since body is required but not provided
+    const data = await response.json();
+    expect(data.message).toBe('Invalid body');
+  });
+
+  it('should return the value when no body schema is defined and no body is provided', async () => {
+    const POST = createZodRoute().handler(() => {
+      // If we reach here, it means no validation error was thrown
+      return Response.json({ success: true }, { status: 200 });
+    });
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      // No body provided intentionally
+    });
+    const response = await POST(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200); // Should fail with 400 since body is required but not provided
+    const data = await response.json();
+    expect(data.success).toBe(true);
+  });
 });
 
 describe('combined validation', () => {

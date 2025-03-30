@@ -56,21 +56,14 @@ const bodySchema = z.object({
   field: z.string(),
 });
 
-const metadataSchema = z.object({
-  permission: z.string(),
-  role: z.enum(['admin', 'user']),
-});
-
 export const GET = createZodRoute()
   .params(paramsSchema)
   .query(querySchema)
-  .defineMetadata(metadataSchema)
   .handler((request, context) => {
     const { id } = context.params;
     const { search } = context.query;
-    const { permission, role } = context.metadata!;
 
-    return Response.json({ id, search, permission, role }), { status: 200 };
+    return { id, search, permission, role };
   });
 
 export const POST = createZodRoute()
@@ -83,7 +76,8 @@ export const POST = createZodRoute()
     const { search } = context.query;
     const { field } = context.body;
 
-    return Response.json({ id, search, field }), { status: 200 };
+    // Custom status
+    return NextResponse.json({ id, search, field }), { status: 400 };
   });
 ```
 
@@ -111,7 +105,7 @@ You can return responses in two ways:
 1. **Return a Response object directly:**
 
 ```ts
-return Response.json({ data: 'value' }, { status: 200 });
+return NextResponse.json({ data: 'value' }, { status: 200 });
 ```
 
 2. **Return a plain object** that will be automatically converted to a JSON response with status 200:
@@ -121,6 +115,19 @@ return { data: 'value' };
 ```
 
 ## Advanced Usage
+
+## Create client
+
+You can create a reusable client in a file, I recommend `/src/lib/route.ts` with the following content:
+
+```tsx
+import { createZodRoute } from 'next-zod-route';
+
+const route = createZodRoute();
+
+// Create other re-usable route
+const authRoute = route.use(...)
+```
 
 ### Static Parameters with Metadata
 

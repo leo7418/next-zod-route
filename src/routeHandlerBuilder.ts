@@ -168,15 +168,21 @@ export class RouteHandlerBuilder<
         // Support both JSON and FormData parsing
         let body: unknown = {};
         if (request.method !== 'GET' && request.method !== 'DELETE') {
-          const contentType = request.headers.get('content-type') || '';
-          if (
-            contentType.includes('multipart/form-data') ||
-            contentType.includes('application/x-www-form-urlencoded')
-          ) {
-            const formData = await request.formData();
-            body = Object.fromEntries(formData.entries());
-          } else {
-            body = await request.json();
+          try {
+            const contentType = request.headers.get('content-type') || '';
+            if (
+              contentType.includes('multipart/form-data') ||
+              contentType.includes('application/x-www-form-urlencoded')
+            ) {
+              const formData = await request.formData();
+              body = Object.fromEntries(formData.entries());
+            } else {
+              body = await request.json();
+            }
+          } catch (error) {
+            if (this.config.bodySchema) {
+              throw new InternalRouteHandlerError(JSON.stringify({ message: 'Invalid body', errors: error }));
+            }
           }
         }
 
@@ -204,6 +210,7 @@ export class RouteHandlerBuilder<
 
         // Validate the body against the provided schema
         if (this.config.bodySchema) {
+          console.log('body', body);
           const bodyResult = this.config.bodySchema.safeParse(body);
           if (!bodyResult.success) {
             throw new InternalRouteHandlerError(
