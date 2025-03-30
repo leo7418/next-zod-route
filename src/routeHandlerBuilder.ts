@@ -210,7 +210,6 @@ export class RouteHandlerBuilder<
 
         // Validate the body against the provided schema
         if (this.config.bodySchema) {
-          console.log('body', body);
           const bodyResult = this.config.bodySchema.safeParse(body);
           if (!bodyResult.success) {
             throw new InternalRouteHandlerError(
