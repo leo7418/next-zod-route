@@ -225,8 +225,8 @@ const loggingMiddleware = async ({ next }) => {
 
   const response = await next();
 
-  const endTime = performance.now() - start;
-  console.log(`After handler - took ${Math.round(endTime - startTime)}ms`);
+  const endTime = performance.now() - startTime;
+  console.log(`After handler - took ${Math.round(endTime)}ms`);
 
   return response;
 };
