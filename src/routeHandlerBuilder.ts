@@ -162,7 +162,12 @@ export class RouteHandlerBuilder<
       try {
         const url = new URL(request.url);
         let params = context?.params ? await context.params : {};
-        let query = Object.fromEntries(url.searchParams.entries());
+        let query = Object.fromEntries(
+          [...url.searchParams.keys()].map((key) => {
+            const values = url.searchParams.getAll(key);
+            return values.length === 1 ? [key, values[0]] : [key, values];
+          }),
+        );
         let metadata = this.metadataValue;
 
         // Support both JSON and FormData parsing
