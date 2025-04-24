@@ -10,6 +10,7 @@ const paramsSchema = z.object({
 
 const querySchema = z.object({
   search: z.string().min(1),
+  status: z.string().array().optional(),
 });
 
 const bodySchema = z.object({
@@ -87,6 +88,23 @@ describe('query validation', () => {
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid query');
+  });
+
+  it('should validate and handle valid query when query is array', async () => {
+    const GET = createZodRoute()
+      .params(paramsSchema)
+      .handler((request, context) => {
+        expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
+        const status = context.query.status;
+        return Response.json({ status }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/?search=test&status=active&status=inactive');
+    const response = await GET(request, { params: Promise.resolve({ id: 'D570D9AB-E002-46EA-996F-0E0023C8F702' }) });
+    const data = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ status: ['active', 'inactive'] });
   });
 });
 
