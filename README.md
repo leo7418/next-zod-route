@@ -142,13 +142,15 @@ One powerful use case for metadata is defining required permissions for routes a
 Here's how to implement permission-based authorization:
 
 ```ts
+import { type MiddlewareFunction } from 'next-zod-route';
+
 // Define a schema for permissions metadata
 const permissionsMetadataSchema = z.object({
   requiredPermissions: z.array(z.string()).optional(),
 });
 
 // Create a middleware that checks permissions
-const permissionCheckMiddleware = async ({ next, metadata, request }) => {
+const permissionCheckMiddleware: MiddlewareFunction = async ({ next, metadata, request }) => {
   // Get user permissions from auth header, token, or session
   const userPermissions = getUserPermissions(request);
 
@@ -219,10 +221,13 @@ This pattern allows you to:
 You can add middleware to your route handler with the `use` method. Middleware functions can add data to the context that will be available in your handler.
 
 ```ts
-const loggingMiddleware = async ({ next }) => {
+import { type MiddlewareFunction, createZodRoute } from 'next-zod-route';
+
+const loggingMiddleware: MiddlewareFunction = async ({ next }) => {
   console.log('Before handler');
   const startTime = performance.now();
 
+  // next() returns a Promise<Response>
   const response = await next();
 
   const endTime = performance.now() - startTime;
@@ -231,7 +236,7 @@ const loggingMiddleware = async ({ next }) => {
   return response;
 };
 
-const authMiddleware = async ({ request, metadata, next }) => {
+const authMiddleware: MiddlewareFunction = async ({ request, metadata, next }) => {
   try {
     // Get the token from the request headers
     const token = request.headers.get('authorization')?.split(' ')[1];
@@ -245,8 +250,9 @@ const authMiddleware = async ({ request, metadata, next }) => {
     const user = await validateToken(token);
 
     // Add context & continue chain
+    // next() accepts an optional object with a context property
     const response = await next({
-      context: { user },
+      context: { user }, // This context will be merged with existing context
     });
 
     // You can modify the response after the handler
@@ -263,7 +269,7 @@ const authMiddleware = async ({ request, metadata, next }) => {
   }
 };
 
-const permissionsMiddleware = async ({ metadata, next }) => {
+const permissionsMiddleware: MiddlewareFunction = async ({ metadata, next }) => {
   // Metadata are optional and type-safe
   const response = await next({
     context: { permissions: metadata?.permissions ?? ['read'] },
@@ -311,7 +317,9 @@ The middleware can:
 #### Pre/Post Handler Execution
 
 ```ts
-const timingMiddleware = async ({ next }) => {
+import { type MiddlewareFunction } from 'next-zod-route';
+
+const timingMiddleware: MiddlewareFunction = async ({ next }) => {
   console.log('Starting request...');
   const start = performance.now();
 
@@ -327,7 +335,9 @@ const timingMiddleware = async ({ next }) => {
 #### Response Modification
 
 ```ts
-const headerMiddleware = async ({ next }) => {
+import { type MiddlewareFunction } from 'next-zod-route';
+
+const headerMiddleware: MiddlewareFunction = async ({ next }) => {
   const response = await next();
 
   return new Response(response.body, {
@@ -343,14 +353,16 @@ const headerMiddleware = async ({ next }) => {
 #### Context Chaining
 
 ```ts
-const middleware1 = async ({ next }) => {
+import { type MiddlewareFunction } from 'next-zod-route';
+
+const middleware1: MiddlewareFunction = async ({ next }) => {
   const response = await next({
     context: { value1: 'first' },
   });
   return response;
 };
 
-const middleware2 = async ({ context, next }) => {
+const middleware2: MiddlewareFunction = async ({ context, next }) => {
   // Access previous context
   console.log(context.value1); // 'first'
 
@@ -364,7 +376,9 @@ const middleware2 = async ({ context, next }) => {
 #### Early Returns
 
 ```ts
-const authMiddleware = async ({ next }) => {
+import { type MiddlewareFunction } from 'next-zod-route';
+
+const authMiddleware: MiddlewareFunction = async ({ next }) => {
   const isAuthed = false;
 
   if (!isAuthed) {
@@ -400,7 +414,9 @@ const route = createZodRoute()
 #### After (v0.2.0)
 
 ```typescript
-const authMiddleware = async ({ next }) => {
+import { type MiddlewareFunction } from 'next-zod-route';
+
+const authMiddleware: MiddlewareFunction = async ({ next }) => {
   // Execute code before handler
   console.log('Checking auth...');
 
