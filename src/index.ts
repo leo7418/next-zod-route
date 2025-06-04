@@ -1,3 +1,3 @@
 export { createZodRoute } from './createZodRoute';
 export { type RouteHandlerBuilder } from './routeHandlerBuilder';
-export { type HandlerFunction, type RouteHandlerBuilderConfig } from './types';
+export { type HandlerFunction, type MiddlewareFunction, type RouteHandlerBuilderConfig } from './types';
