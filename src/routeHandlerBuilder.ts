@@ -38,7 +38,16 @@ export class RouteHandlerBuilder<
     bodySchema: TBody;
     metadataSchema?: TMetadata;
   };
-  readonly middlewares: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
+  readonly middlewares: Array<
+    MiddlewareFunction<
+      z.infer<TParams>,
+      z.infer<TQuery>,
+      z.infer<TBody>,
+      TContext,
+      Record<string, unknown>,
+      z.infer<TMetadata>
+    >
+  >;
   readonly handleServerError?: HandlerServerErrorFn;
   readonly metadataValue: z.infer<TMetadata>;
   readonly contextType!: TContext;
@@ -61,7 +70,16 @@ export class RouteHandlerBuilder<
       bodySchema: TBody;
       metadataSchema?: TMetadata;
     };
-    middlewares?: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
+    middlewares?: Array<
+      MiddlewareFunction<
+        z.infer<TParams>,
+        z.infer<TQuery>,
+        z.infer<TBody>,
+        TContext,
+        Record<string, unknown>,
+        z.infer<TMetadata>
+      >
+    >;
     handleServerError?: HandlerServerErrorFn;
     contextType: TContext;
     metadataValue?: z.infer<TMetadata>;
@@ -139,14 +157,19 @@ export class RouteHandlerBuilder<
    * @returns A new instance of the RouteHandlerBuilder
    */
   use<TNestContext extends Record<string, unknown>>(
-    middleware: MiddlewareFunction<TContext, TNestContext & TContext, z.infer<TMetadata>>,
+    middleware: MiddlewareFunction<
+      z.infer<TParams>,
+      z.infer<TQuery>,
+      z.infer<TBody>,
+      TContext,
+      TNestContext,
+      z.infer<TMetadata>
+    >,
   ): RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNestContext, TMetadata> {
-    type MergedContext = TContext & TNestContext;
-
-    return new RouteHandlerBuilder<TParams, TQuery, TBody, MergedContext, TMetadata>({
+    return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNestContext, TMetadata>({
       ...this,
       middlewares: [...this.middlewares, middleware],
-      contextType: {} as MergedContext,
+      contextType: {} as TContext & TNestContext,
     });
   }
 
@@ -275,6 +298,9 @@ export class RouteHandlerBuilder<
           try {
             const result = await middleware({
               request,
+              params: params as z.infer<TParams>,
+              query: query as z.infer<TQuery>,
+              body: body as z.infer<TBody>,
               ctx: middlewareContext,
               metadata,
               next,

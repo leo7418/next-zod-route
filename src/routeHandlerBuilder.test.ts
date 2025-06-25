@@ -291,9 +291,13 @@ describe('combined validation', () => {
   });
 
   it('should execute middleware and add context properties', async () => {
-    const middleware: MiddlewareFunction<Record<string, unknown>, { user: { id: string; role: string } }> = async ({
-      next,
-    }) => {
+    const middleware: MiddlewareFunction<
+      unknown, // TParams
+      unknown, // TQuery
+      unknown, // TBody
+      Record<string, unknown>, // TContext
+      { user: { id: string; role: string } } // TNextContext
+    > = async ({ next }) => {
       const result = await next({ ctx: { user: { id: 'user-123', role: 'admin' } } });
       return result;
     };
@@ -844,6 +848,9 @@ describe('permission checking with metadata', () => {
   });
 
   const permissionCheckMiddleware: MiddlewareFunction<
+    unknown,
+    unknown,
+    unknown,
     Record<string, unknown>,
     { authorized: boolean },
     z.infer<typeof permissionsMetadataSchema>
@@ -995,6 +1002,133 @@ describe('permission checking with metadata', () => {
       id: '550e8400-e29b-41d4-a716-446655440000',
       authorized: true,
       logged: true,
+    });
+  });
+});
+
+describe('middleware receives params, query, and body', () => {
+  it('should receive params in middleware', async () => {
+    const middleware: MiddlewareFunction<
+      z.infer<typeof paramsSchema>,
+      unknown,
+      unknown,
+      Record<string, unknown>,
+      Record<string, unknown>
+    > = async ({ params, next }) => {
+      expect(params).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' });
+      return next();
+    };
+
+    const GET = createZodRoute()
+      .params(paramsSchema)
+      .use(middleware)
+      .handler((request, context) => {
+        return Response.json({ id: context.params.id }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' });
+  });
+
+  it('should receive query in middleware', async () => {
+    const middleware: MiddlewareFunction<
+      unknown,
+      z.infer<typeof querySchema>,
+      unknown,
+      Record<string, unknown>,
+      Record<string, unknown>
+    > = async ({ query, next }) => {
+      expect(query).toEqual({ search: 'test' });
+      return next();
+    };
+
+    const GET = createZodRoute()
+      .query(querySchema)
+      .use(middleware)
+      .handler((request, context) => {
+        return Response.json({ search: context.query.search }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/?search=test');
+    const response = await GET(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ search: 'test' });
+  });
+
+  it('should receive body in middleware', async () => {
+    const middleware: MiddlewareFunction<
+      unknown,
+      unknown,
+      z.infer<typeof bodySchema>,
+      Record<string, unknown>,
+      Record<string, unknown>
+    > = async ({ body, next }) => {
+      expect(body).toEqual({ field: 'test-field' });
+      return next();
+    };
+
+    const POST = createZodRoute()
+      .body(bodySchema)
+      .use(middleware)
+      .handler((request, context) => {
+        return Response.json({ field: context.body.field }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: JSON.stringify({ field: 'test-field' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ field: 'test-field' });
+  });
+
+  it('should receive params, query, and body together in middleware', async () => {
+    const middleware: MiddlewareFunction<
+      z.infer<typeof paramsSchema>,
+      z.infer<typeof querySchema>,
+      z.infer<typeof bodySchema>,
+      Record<string, unknown>,
+      Record<string, unknown>
+    > = async ({ params, query, body, next }) => {
+      expect(params).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' });
+      expect(query).toEqual({ search: 'test' });
+      expect(body).toEqual({ field: 'test-field' });
+      return next();
+    };
+
+    const POST = createZodRoute()
+      .params(paramsSchema)
+      .query(querySchema)
+      .body(bodySchema)
+      .use(middleware)
+      .handler((request, context) => {
+        return Response.json(
+          {
+            id: context.params.id,
+            search: context.query.search,
+            field: context.body.field,
+          },
+          { status: 200 },
+        );
+      });
+
+    const request = new Request('http://localhost/?search=test', {
+      method: 'POST',
+      body: JSON.stringify({ field: 'test-field' }),
+    });
+    const response = await POST(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      search: 'test',
+      field: 'test-field',
     });
   });
 });

@@ -45,11 +45,17 @@ export type NextFunction<TContext> = {
  * @returns Promise resolving to either additional context or a Response to short-circuit
  */
 export type MiddlewareFunction<
+  TParams = unknown,
+  TQuery = unknown,
+  TBody = unknown,
   TContext = Record<string, unknown>,
   TNextContext = Record<string, unknown>,
   TMetadata = unknown,
 > = (opts: {
   request: Request;
+  params: TParams;
+  query: TQuery;
+  body: TBody;
   ctx: TContext;
   metadata?: TMetadata;
   next: NextFunction<TContext>;
