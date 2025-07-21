@@ -155,6 +155,7 @@ declare class RouteHandlerBuilder<TParams extends z__default.Schema = z__default
 
 declare function createZodRoute(params?: {
     handleServerError?: HandlerServerErrorFn;
+    handleFormData?: HandlerFormData;
 }): RouteHandlerBuilder<z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, z.ZodType<any, z.ZodTypeDef, any>, {}, z.ZodType<any, z.ZodTypeDef, any>>;
 
 export { type HandlerFunction, type MiddlewareFunction, RouteHandlerBuilder, type RouteHandlerBuilderConfig, createZodRoute };
