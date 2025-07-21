@@ -1,5 +1,6 @@
-import * as z from 'zod';
-import z__default, { Schema } from 'zod';
+import * as z from 'zod/v3';
+import z__default from 'zod/v3';
+import { Schema } from 'zod';
 
 /**
  * Function that is called when the route handler is executed and all the middleware has been executed
@@ -76,6 +77,12 @@ type OriginalRouteHandler = (request: Request, context: {
  * @returns Response object with appropriate error details and status code
  */
 type HandlerServerErrorFn = (error: Error) => Response;
+/**
+ * Function that handles FormData parsing or transformation.
+ * @param formData - The FormData object to process.
+ * @returns The result of processing the FormData, typically a plain object or any transformed value.
+ */
+type HandlerFormData = (formData: globalThis.FormData) => unknown;
 
 declare class RouteHandlerBuilder<TParams extends z__default.Schema = z__default.Schema, TQuery extends z__default.Schema = z__default.Schema, TBody extends z__default.Schema = z__default.Schema, TContext = {}, TMetadata extends z__default.Schema = z__default.Schema> {
     readonly config: {
@@ -86,9 +93,10 @@ declare class RouteHandlerBuilder<TParams extends z__default.Schema = z__default
     };
     readonly middlewares: Array<MiddlewareFunction<z__default.infer<TParams>, z__default.infer<TQuery>, z__default.infer<TBody>, TContext, Record<string, unknown>, z__default.infer<TMetadata>>>;
     readonly handleServerError?: HandlerServerErrorFn;
+    readonly handleFormData?: HandlerFormData;
     readonly metadataValue: z__default.infer<TMetadata>;
     readonly contextType: TContext;
-    constructor({ config, middlewares, handleServerError, contextType, metadataValue, }: {
+    constructor({ config, middlewares, handleServerError, handleFormData, contextType, metadataValue, }: {
         config?: {
             paramsSchema: TParams;
             querySchema: TQuery;
@@ -97,6 +105,7 @@ declare class RouteHandlerBuilder<TParams extends z__default.Schema = z__default
         };
         middlewares?: Array<MiddlewareFunction<z__default.infer<TParams>, z__default.infer<TQuery>, z__default.infer<TBody>, TContext, Record<string, unknown>, z__default.infer<TMetadata>>>;
         handleServerError?: HandlerServerErrorFn;
+        handleFormData?: HandlerFormData;
         contextType: TContext;
         metadataValue?: z__default.infer<TMetadata>;
     });

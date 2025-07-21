@@ -1,7 +1,7 @@
-// eslint-disable-next-line import/no-named-as-default
-import z from 'zod';
+import z from 'zod/v3';
 
 import {
+  HandlerFormData,
   HandlerFunction,
   HandlerServerErrorFn,
   MiddlewareFunction,
@@ -28,7 +28,6 @@ export class RouteHandlerBuilder<
   TParams extends z.Schema = z.Schema,
   TQuery extends z.Schema = z.Schema,
   TBody extends z.Schema = z.Schema,
-  // eslint-disable-next-line @typescript-eslint/ban-types
   TContext = {},
   TMetadata extends z.Schema = z.Schema,
 > {
@@ -49,6 +48,7 @@ export class RouteHandlerBuilder<
     >
   >;
   readonly handleServerError?: HandlerServerErrorFn;
+  readonly handleFormData?: HandlerFormData;
   readonly metadataValue: z.infer<TMetadata>;
   readonly contextType!: TContext;
 
@@ -61,6 +61,7 @@ export class RouteHandlerBuilder<
     },
     middlewares = [],
     handleServerError,
+    handleFormData,
     contextType,
     metadataValue,
   }: {
@@ -81,12 +82,14 @@ export class RouteHandlerBuilder<
       >
     >;
     handleServerError?: HandlerServerErrorFn;
+    handleFormData?: HandlerFormData;
     contextType: TContext;
     metadataValue?: z.infer<TMetadata>;
   }) {
     this.config = config;
     this.middlewares = middlewares;
     this.handleServerError = handleServerError;
+    this.handleFormData = handleFormData;
     this.contextType = contextType as TContext;
     this.metadataValue = metadataValue;
   }
@@ -203,7 +206,7 @@ export class RouteHandlerBuilder<
               contentType.includes('application/x-www-form-urlencoded')
             ) {
               const formData = await request.formData();
-              body = Object.fromEntries(formData.entries());
+              body = this.handleFormData ? this.handleFormData(formData) : Object.fromEntries(formData.entries());
             } else {
               body = await request.json();
             }

@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-types */
-
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Schema } from 'zod';
 
@@ -90,3 +88,10 @@ export type OriginalRouteHandler = (request: Request, context: { params: Promise
  * @returns Response object with appropriate error details and status code
  */
 export type HandlerServerErrorFn = (error: Error) => Response;
+
+/**
+ * Function that handles FormData parsing or transformation.
+ * @param formData - The FormData object to process.
+ * @returns The result of processing the FormData, typically a plain object or any transformed value.
+ */
+export type HandlerFormData = (formData: globalThis.FormData) => unknown;

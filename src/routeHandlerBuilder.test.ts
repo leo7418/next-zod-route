@@ -1,7 +1,8 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v3';
 
 import { createZodRoute } from './createZodRoute';
+import { RouteHandlerBuilder } from './routeHandlerBuilder';
 import { MiddlewareFunction } from './types';
 
 const paramsSchema = z.object({
@@ -1130,5 +1131,98 @@ describe('middleware receives params, query, and body', () => {
       search: 'test',
       field: 'test-field',
     });
+  });
+});
+
+describe('handleFormData option', () => {
+  const customFormDataHandler = (formData: globalThis.FormData) => {
+    // Transforme le FormData en un objet avec tous les champs en majuscules
+    const obj: Record<string, string> = {};
+    for (const [key, value] of formData.entries()) {
+      obj[key.toUpperCase()] = String(value).toUpperCase();
+    }
+    return obj;
+  };
+
+  const customBodySchema = z.object({ FIELD: z.string() });
+
+  it('should use handleFormData to transform form data', async () => {
+    const POST = new RouteHandlerBuilder({
+      handleFormData: customFormDataHandler,
+      contextType: {},
+      config: { paramsSchema: z.object({}), querySchema: z.object({}), bodySchema: customBodySchema },
+    })
+      .body(customBodySchema)
+      .handler((request, context) => {
+        expect(context.body).toEqual({ FIELD: 'TEST-FIELD' });
+        return Response.json(context.body, { status: 200 });
+      });
+
+    const formData = new URLSearchParams();
+    formData.append('field', 'test-field');
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: formData,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    const response = await POST(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ FIELD: 'TEST-FIELD' });
+  });
+
+  it('should fail validation if handleFormData returns invalid object', async () => {
+    const invalidHandler = () => ({ notField: 'value' });
+    const POST = new RouteHandlerBuilder({
+      handleFormData: invalidHandler,
+      contextType: {},
+      config: { paramsSchema: z.object({}), querySchema: z.object({}), bodySchema: customBodySchema },
+    })
+      .body(customBodySchema)
+      .handler((request, context) => {
+        return Response.json(context.body, { status: 200 });
+      });
+
+    const formData = new URLSearchParams();
+    formData.append('field', 'test-field');
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: formData,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    const response = await POST(request, { params: Promise.resolve({}) });
+    expect(response.status).toBe(400);
+    const data = await response.json();
+    expect(data.message).toBe('Invalid body');
+  });
+
+  it('should fallback to default FormData parsing if handleFormData is not provided', async () => {
+    const POST = new RouteHandlerBuilder({
+      contextType: {},
+      config: { paramsSchema: z.object({}), querySchema: z.object({}), bodySchema: z.object({ field: z.string() }) },
+    })
+      .body(z.object({ field: z.string() }))
+      .handler((request, context) => {
+        expect(context.body).toEqual({ field: 'test-field' });
+        return Response.json(context.body, { status: 200 });
+      });
+
+    const formData = new URLSearchParams();
+    formData.append('field', 'test-field');
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: formData,
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+
+    const response = await POST(request, { params: Promise.resolve({}) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ field: 'test-field' });
   });
 });
