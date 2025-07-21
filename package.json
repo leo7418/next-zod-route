@@ -1,6 +1,6 @@
 {
   "name": "@l.leo/next-zod-route",
-  "version": "0.4.1",
+  "version": "0.4.3",
   "description": "A zod way to define route handlers in Next.js",
   "keywords": [
     "next",
@@ -54,7 +54,7 @@
     ]
   },
   "dependencies": {
-    "zod": "^4.0.5"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@eslint/js": "^9.31.0",

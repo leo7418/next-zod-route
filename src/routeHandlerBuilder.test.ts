@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { z } from 'zod/v3';
+import { z } from 'zod';
 
 import { createZodRoute } from './createZodRoute';
 import { RouteHandlerBuilder } from './routeHandlerBuilder';

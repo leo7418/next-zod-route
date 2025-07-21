@@ -1,6 +1,5 @@
-import * as z from 'zod/v3';
-import z__default from 'zod/v3';
-import { Schema } from 'zod';
+import * as z from 'zod';
+import z__default, { Schema } from 'zod';
 
 /**
  * Function that is called when the route handler is executed and all the middleware has been executed
