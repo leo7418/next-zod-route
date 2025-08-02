@@ -157,7 +157,7 @@ declare class RouteHandlerBuilder<TParams extends z__default.ZodType = z__defaul
      * @param handler - The handler function that will be called when the route is hit
      * @returns The original route handler that Next.js expects with the validation logic
      */
-    handler<TReturn>(handler: HandlerFunction<z__default.output<TParams>, z__default.output<TQuery>, z__default.output<TBody>, TContext, z__default.output<TMetadata>, TReturn>): OriginalRouteHandler<Promise<OriginalRouteResponse<TReturn>>>;
+    handler<TReturn>(handler: HandlerFunction<z__default.output<TParams>, z__default.output<TQuery>, z__default.output<TBody>, TContext, z__default.output<TMetadata>, TReturn>): OriginalRouteHandler<Promise<OriginalRouteResponse<Awaited<TReturn>>>>;
 }
 
 declare function createZodRoute(params?: {

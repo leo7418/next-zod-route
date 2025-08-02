@@ -245,8 +245,8 @@ export class RouteHandlerBuilder<
       z.output<TMetadata>,
       TReturn
     >,
-  ): OriginalRouteHandler<Promise<OriginalRouteResponse<TReturn>>> {
-    return async (request, context): Promise<OriginalRouteResponse<TReturn>> => {
+  ): OriginalRouteHandler<Promise<OriginalRouteResponse<Awaited<TReturn>>>> {
+    return async (request, context): Promise<OriginalRouteResponse<Awaited<TReturn>>> => {
       try {
         const url = new URL(request.url);
         let params: unknown = context?.params ? await context.params : {};
@@ -326,7 +326,7 @@ export class RouteHandlerBuilder<
         // Execute middleware chain
         let middlewareContext: TContext = {} as TContext;
 
-        const executeMiddlewareChain = async (index: number): Promise<OriginalRouteResponse<TReturn>> => {
+        const executeMiddlewareChain = async (index: number): Promise<OriginalRouteResponse<Awaited<TReturn>>> => {
           if (index >= this.middlewares.length) {
             try {
               const result = await handler(request, {
@@ -337,12 +337,12 @@ export class RouteHandlerBuilder<
                 metadata: metadata as z.output<TMetadata>,
               });
 
-              if (result instanceof Response) return result as OriginalRouteResponse<TReturn>;
+              if (result instanceof Response) return result as OriginalRouteResponse<Awaited<TReturn>>;
 
               return new Response(JSON.stringify(result), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' },
-              }) as OriginalRouteResponse<TReturn>;
+              }) as OriginalRouteResponse<Awaited<TReturn>>;
             } catch (error) {
               return handleError(error as Error, this.handleServerError);
             }
@@ -371,7 +371,7 @@ export class RouteHandlerBuilder<
               next,
             });
 
-            if (result instanceof Response) return result as OriginalRouteResponse<TReturn>;
+            if (result instanceof Response) return result as OriginalRouteResponse<Awaited<TReturn>>;
 
             middlewareContext = { ...middlewareContext };
             return result;
@@ -391,16 +391,16 @@ export class RouteHandlerBuilder<
 const handleError = <TReturn>(
   error: Error,
   handleServerError?: HandlerServerErrorFn,
-): OriginalRouteResponse<TReturn> => {
+): OriginalRouteResponse<Awaited<TReturn>> => {
   if (error instanceof InternalRouteHandlerError) {
-    return new Response(error.message, { status: 400 }) as OriginalRouteResponse<TReturn>;
+    return new Response(error.message, { status: 400 }) as OriginalRouteResponse<Awaited<TReturn>>;
   }
 
   if (handleServerError) {
-    return handleServerError(error as Error) as OriginalRouteResponse<TReturn>;
+    return handleServerError(error as Error) as OriginalRouteResponse<Awaited<TReturn>>;
   }
 
   return new Response(JSON.stringify({ message: 'Internal server error' }), {
     status: 500,
-  }) as OriginalRouteResponse<TReturn>;
+  }) as OriginalRouteResponse<Awaited<TReturn>>;
 };
