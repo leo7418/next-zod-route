@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Schema } from 'zod';
+import { ZodType } from 'zod';
 
 /**
  * Function that is called when the route handler is executed and all the middleware has been executed
@@ -7,10 +6,10 @@ import { Schema } from 'zod';
  * @param context - The context object
  * @returns The response from the route handler
  */
-export type HandlerFunction<TParams, TQuery, TBody, TContext, TMetadata = unknown> = (
+export type HandlerFunction<TParams, TQuery, TBody, TContext, TMetadata = unknown, TReturn = unknown> = (
   request: Request,
   context: { params: TParams; query: TQuery; body: TBody; ctx: TContext; metadata?: TMetadata },
-) => any;
+) => TReturn | Response;
 
 /**
  * Represents the merged context type between the existing context and new context added by middleware
@@ -71,16 +70,19 @@ export type MiddlewareResult<TContext> = Response & { ctx?: TContext };
  * @param bodySchema - Schema for the route body
  */
 export interface RouteHandlerBuilderConfig {
-  paramsSchema: Schema;
-  querySchema: Schema;
-  bodySchema: Schema;
+  paramsSchema: ZodType;
+  querySchema: ZodType;
+  bodySchema: ZodType;
 }
 
 /**
  * Original Next.js route handler type for reference
  * This is the type that Next.js uses internally before our library wraps it
  */
-export type OriginalRouteHandler = (request: Request, context: { params: Promise<Record<string, unknown>> }) => any;
+export type OriginalRouteHandler<TReturn> = (
+  request: Request,
+  context: { params: Promise<Record<string, unknown>> },
+) => TReturn;
 
 /**
  * Function that handles server errors in route handlers
@@ -95,3 +97,15 @@ export type HandlerServerErrorFn = (error: Error) => Response;
  * @returns The result of processing the FormData, typically a plain object or any transformed value.
  */
 export type HandlerFormData = (formData: globalThis.FormData) => unknown;
+
+export type OriginalRouteResponse<T> = Response & { json: () => Promise<T> };
+
+/**
+ * Utility type to extract the return type of a route handler
+ */
+export type RouteResponse<T> =
+  T extends OriginalRouteHandler<infer R>
+    ? Awaited<R> extends OriginalRouteResponse<infer R2>
+      ? Awaited<R2>
+      : Awaited<R>
+    : never;

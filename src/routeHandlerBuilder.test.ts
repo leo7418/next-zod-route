@@ -3,10 +3,10 @@ import { z } from 'zod';
 
 import { createZodRoute } from './createZodRoute';
 import { RouteHandlerBuilder } from './routeHandlerBuilder';
-import { MiddlewareFunction } from './types';
+import { MiddlewareFunction, RouteResponse } from './types';
 
 const paramsSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 const querySchema = z.object({
@@ -27,14 +27,14 @@ describe('params validation', () => {
     const GET = createZodRoute()
       .params(paramsSchema)
       .handler((request, context) => {
-        expectTypeOf(context.params).toMatchTypeOf<z.infer<typeof paramsSchema>>();
+        expectTypeOf(context.params).toMatchObjectType<z.output<typeof paramsSchema>>();
         const { id } = context.params;
         return Response.json({ id }, { status: 200 });
       });
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' });
@@ -50,7 +50,7 @@ describe('params validation', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: paramsToPromise({ id: 'invalid-uuid' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid params');
@@ -61,15 +61,16 @@ describe('query validation', () => {
   it('should validate and handle valid query', async () => {
     const GET = createZodRoute()
       .params(paramsSchema)
+      .query(querySchema)
       .handler((request, context) => {
-        expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
+        expectTypeOf(context.query).toMatchObjectType<z.output<typeof querySchema>>();
         const search = context.query.search;
         return Response.json({ search }, { status: 200 });
       });
 
     const request = new Request('http://localhost/?search=test');
     const response = await GET(request, { params: Promise.resolve({ id: 'D570D9AB-E002-46EA-996F-0E0023C8F702' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ search: 'test' });
@@ -85,7 +86,7 @@ describe('query validation', () => {
 
     const request = new Request('http://localhost/?search=');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid query');
@@ -94,15 +95,16 @@ describe('query validation', () => {
   it('should validate and handle valid query when query is array', async () => {
     const GET = createZodRoute()
       .params(paramsSchema)
+      .query(querySchema)
       .handler((request, context) => {
-        expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
+        expectTypeOf(context.query).toMatchObjectType<z.output<typeof querySchema>>();
         const status = context.query.status;
         return Response.json({ status }, { status: 200 });
       });
 
     const request = new Request('http://localhost/?search=test&status=active&status=inactive');
     const response = await GET(request, { params: Promise.resolve({ id: 'D570D9AB-E002-46EA-996F-0E0023C8F702' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ status: ['active', 'inactive'] });
@@ -114,7 +116,7 @@ describe('body validation', () => {
     const POST = createZodRoute()
       .body(bodySchema)
       .handler((request, context) => {
-        expectTypeOf(context.body).toMatchTypeOf<z.infer<typeof bodySchema>>();
+        expectTypeOf(context.body).toMatchObjectType<z.output<typeof bodySchema>>();
         const field = context.body.field;
         return Response.json({ field }, { status: 200 });
       });
@@ -124,7 +126,7 @@ describe('body validation', () => {
       body: JSON.stringify({ field: 'test-field' }),
     });
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ field: 'test-field' });
@@ -143,7 +145,7 @@ describe('body validation', () => {
       body: JSON.stringify({ field: 123 }),
     });
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid body');
@@ -164,7 +166,7 @@ describe('body validation', () => {
     const response = await POST(request, { params: Promise.resolve({}) });
 
     expect(response.status).toBe(400); // Should fail with 400 since body is required but not provided
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(data.message).toBe('Invalid body');
   });
 
@@ -181,7 +183,7 @@ describe('body validation', () => {
     const response = await POST(request, { params: Promise.resolve({}) });
 
     expect(response.status).toBe(200); // Should fail with 400 since body is required but not provided
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(data.success).toBe(true);
   });
 });
@@ -206,7 +208,7 @@ describe('combined validation', () => {
     });
 
     const response = await POST(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -235,7 +237,7 @@ describe('combined validation', () => {
     });
 
     const response = await POST(request, { params: paramsToPromise({ id: 'invalid-uuid' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid params');
@@ -260,7 +262,7 @@ describe('combined validation', () => {
     });
 
     const response = await POST(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid query');
@@ -285,7 +287,7 @@ describe('combined validation', () => {
     });
 
     const response = await POST(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid body');
@@ -310,14 +312,14 @@ describe('combined validation', () => {
         const { id } = context.params;
         const { user } = context.ctx;
 
-        expectTypeOf(user).toMatchTypeOf<{ id: string }>();
+        expectTypeOf(user).toMatchObjectType<{ id: string }>();
 
         return Response.json({ id, user }, { status: 200 });
       });
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -334,7 +336,7 @@ describe('combined validation', () => {
       })
       .use(async ({ next, ctx }) => {
         const user = ctx.user;
-        expectTypeOf(user).toMatchTypeOf<{ id: string }>();
+        expectTypeOf(user).toMatchObjectType<{ id: string }>();
 
         const result = await next({ ctx: { permissions: ['read', 'write'] } });
 
@@ -346,15 +348,15 @@ describe('combined validation', () => {
         const { user, permissions } = context.ctx;
 
         // Context should be automatically typed without explicit type
-        expectTypeOf(user).toMatchTypeOf<{ id: string }>();
-        expectTypeOf(permissions).toMatchTypeOf<string[]>();
+        expectTypeOf(user).toMatchObjectType<{ id: string }>();
+        expectTypeOf(permissions).toExtend<string[]>();
 
         return Response.json({ id, user, permissions }, { status: 200 });
       });
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -389,7 +391,7 @@ describe('combined validation', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data).toEqual({ message: 'CustomError', details: 'Test error' });
@@ -417,7 +419,7 @@ describe('form data handling', () => {
     });
 
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ field: 'test-field' });
@@ -443,7 +445,7 @@ describe('form data handling', () => {
     });
 
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ field: '' });
@@ -461,7 +463,7 @@ describe('response handling', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(201);
     expect(response.headers.get('X-Custom-Header')).toBe('test');
@@ -479,7 +481,7 @@ describe('response handling', () => {
     expect(response.status).toBe(200);
     expect(response.headers.get('Content-Type')).toBe('application/json');
 
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(data).toEqual({ data: 'value' });
   });
 });
@@ -501,7 +503,7 @@ describe('HTTP methods handling', () => {
     });
 
     const response = await DELETE(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true });
@@ -519,7 +521,7 @@ describe('HTTP methods handling', () => {
     });
 
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true });
@@ -537,7 +539,7 @@ describe('metadata validation', () => {
       .defineMetadata(metadataSchema)
       .metadata({ permission: 'read', role: 'admin' })
       .handler((request, context) => {
-        expectTypeOf(context.metadata).toEqualTypeOf<z.infer<typeof metadataSchema> | undefined>();
+        expectTypeOf(context.metadata).toEqualTypeOf<z.output<typeof metadataSchema> | undefined>();
         const { permission, role } = context.metadata!;
         return Response.json({ permission, role }, { status: 200 });
       });
@@ -546,7 +548,7 @@ describe('metadata validation', () => {
     const response = await GET(request, {
       params: Promise.resolve({}),
     });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ permission: 'read', role: 'admin' });
@@ -566,7 +568,7 @@ describe('metadata validation', () => {
     const response = await GET(request, {
       params: Promise.resolve({}),
     });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid metadata');
@@ -582,7 +584,7 @@ describe('metadata validation', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true });
@@ -605,7 +607,7 @@ describe('metadata validation', () => {
     const response = await GET(request, {
       params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
     });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -635,7 +637,7 @@ describe('metadata validation', () => {
     const response = await GET(request, {
       params: Promise.resolve({}),
     });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -660,7 +662,7 @@ describe('metadata validation', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ authorized: false });
@@ -687,7 +689,7 @@ describe('metadata validation', () => {
     const response = await GET(request, {
       params: Promise.resolve({}),
     });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -722,7 +724,7 @@ describe('enhanced middleware functionality', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true });
@@ -836,7 +838,7 @@ describe('enhanced middleware functionality', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(400);
     expect(data).toEqual({ message: 'CustomMiddlewareError', details: 'Middleware error occurred' });
@@ -854,7 +856,7 @@ describe('permission checking with metadata', () => {
     unknown,
     Record<string, unknown>,
     { authorized: boolean },
-    z.infer<typeof permissionsMetadataSchema>
+    z.output<typeof permissionsMetadataSchema>
   > = async ({ next, metadata, request }) => {
     // Get user permissions from auth header (in a real app)
     const userPermissions = request.headers.get('x-user-permissions')?.split(',') || [];
@@ -902,7 +904,7 @@ describe('permission checking with metadata', () => {
     });
 
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true, authorized: true });
@@ -925,7 +927,7 @@ describe('permission checking with metadata', () => {
     });
 
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(403);
     expect(data).toEqual({
@@ -946,7 +948,7 @@ describe('permission checking with metadata', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true, authorized: true });
@@ -963,7 +965,7 @@ describe('permission checking with metadata', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({ success: true, authorized: true });
@@ -996,7 +998,7 @@ describe('permission checking with metadata', () => {
     const response = await GET(request, {
       params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
     });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
 
     expect(response.status).toBe(200);
     expect(data).toEqual({
@@ -1010,7 +1012,7 @@ describe('permission checking with metadata', () => {
 describe('middleware receives params, query, and body', () => {
   it('should receive params in middleware', async () => {
     const middleware: MiddlewareFunction<
-      z.infer<typeof paramsSchema>,
+      z.output<typeof paramsSchema>,
       unknown,
       unknown,
       Record<string, unknown>,
@@ -1029,7 +1031,7 @@ describe('middleware receives params, query, and body', () => {
 
     const request = new Request('http://localhost/');
     const response = await GET(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' });
   });
@@ -1037,7 +1039,7 @@ describe('middleware receives params, query, and body', () => {
   it('should receive query in middleware', async () => {
     const middleware: MiddlewareFunction<
       unknown,
-      z.infer<typeof querySchema>,
+      z.output<typeof querySchema>,
       unknown,
       Record<string, unknown>,
       Record<string, unknown>
@@ -1055,7 +1057,7 @@ describe('middleware receives params, query, and body', () => {
 
     const request = new Request('http://localhost/?search=test');
     const response = await GET(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({ search: 'test' });
   });
@@ -1064,7 +1066,7 @@ describe('middleware receives params, query, and body', () => {
     const middleware: MiddlewareFunction<
       unknown,
       unknown,
-      z.infer<typeof bodySchema>,
+      z.output<typeof bodySchema>,
       Record<string, unknown>,
       Record<string, unknown>
     > = async ({ body, next }) => {
@@ -1084,16 +1086,16 @@ describe('middleware receives params, query, and body', () => {
       body: JSON.stringify({ field: 'test-field' }),
     });
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({ field: 'test-field' });
   });
 
   it('should receive params, query, and body together in middleware', async () => {
     const middleware: MiddlewareFunction<
-      z.infer<typeof paramsSchema>,
-      z.infer<typeof querySchema>,
-      z.infer<typeof bodySchema>,
+      z.output<typeof paramsSchema>,
+      z.output<typeof querySchema>,
+      z.output<typeof bodySchema>,
       Record<string, unknown>,
       Record<string, unknown>
     > = async ({ params, query, body, next }) => {
@@ -1124,7 +1126,7 @@ describe('middleware receives params, query, and body', () => {
       body: JSON.stringify({ field: 'test-field' }),
     });
     const response = await POST(request, { params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({
       id: '550e8400-e29b-41d4-a716-446655440000',
@@ -1168,7 +1170,7 @@ describe('handleFormData option', () => {
     });
 
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({ FIELD: 'TEST-FIELD' });
   });
@@ -1196,7 +1198,7 @@ describe('handleFormData option', () => {
 
     const response = await POST(request, { params: Promise.resolve({}) });
     expect(response.status).toBe(400);
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(data.message).toBe('Invalid body');
   });
 
@@ -1221,8 +1223,285 @@ describe('handleFormData option', () => {
     });
 
     const response = await POST(request, { params: Promise.resolve({}) });
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({ field: 'test-field' });
+  });
+});
+
+describe('return type deduction', () => {
+  describe('type inference', () => {
+    it('should infer return type for plain object', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const GET = createZodRoute().handler(() => {
+        return { message: 'hello', count: 42 };
+      });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<{ message: string; count: number }>();
+    });
+
+    it('should infer return type for Response object', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const GET = createZodRoute().handler(() => {
+        return Response.json({ success: true });
+      });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<Response>();
+    });
+
+    it('should infer return type for union types', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const GET = createZodRoute().handler(() => {
+        const random = Math.random();
+        if (random > 0.5) {
+          return { type: 'object' as const, data: 'string' };
+        }
+        return Response.json({ type: 'response' as const });
+      });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<{ type: 'object'; data: string } | Response>();
+    });
+
+    it('should infer return type with complex nested objects', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const GET = createZodRoute()
+        .params(z.object({ id: z.string() }))
+        .query(z.object({ include: z.string().optional() }))
+        .handler((request, context) => {
+          return {
+            user: {
+              id: context.params.id,
+              profile: {
+                settings: {
+                  theme: 'dark' as const,
+                  notifications: true,
+                },
+              },
+            },
+            meta: {
+              include: context.query.include,
+              timestamp: new Date(),
+            },
+          };
+        });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<{
+        user: {
+          id: string;
+          profile: {
+            settings: {
+              theme: 'dark';
+              notifications: boolean;
+            };
+          };
+        };
+        meta: {
+          include: string | undefined;
+          timestamp: Date;
+        };
+      }>();
+    });
+  });
+
+  describe('runtime behavior', () => {
+    it('should return typed response for plain object', async () => {
+      const GET = createZodRoute().handler(() => {
+        return { message: 'hello world', status: 'success' };
+      });
+
+      const request = new Request('http://localhost/');
+      const response = await GET(request, { params: Promise.resolve({}) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(response.headers.get('Content-Type')).toBe('application/json');
+      expect(data).toEqual({ message: 'hello world', status: 'success' });
+    });
+
+    it('should return typed response for Response object', async () => {
+      const GET = createZodRoute().handler(() => {
+        return new Response('Custom response', {
+          status: 201,
+          headers: { 'Custom-Header': 'value' },
+        });
+      });
+
+      const request = new Request('http://localhost/');
+      const response = await GET(request, { params: Promise.resolve({}) });
+      const text = await response.text();
+
+      expect(response.status).toBe(201);
+      expect(response.headers.get('Custom-Header')).toBe('value');
+      expect(text).toBe('Custom response');
+    });
+
+    it('should preserve type information through middleware chain', async () => {
+      type UserResponse = { user: { id: string; name: string }; timestamp: number };
+
+      const authMiddleware: MiddlewareFunction = async ({ next }) => {
+        return next({ ctx: { userId: 'user123' } });
+      };
+
+      const GET = createZodRoute()
+        .use(authMiddleware)
+        .handler((request, context): UserResponse => {
+          return {
+            user: {
+              id: context.ctx.userId as string,
+              name: 'John Doe',
+            },
+            timestamp: Date.now(),
+          };
+        });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<UserResponse>();
+
+      const request = new Request('http://localhost/');
+      const response = await GET(request, { params: Promise.resolve({}) });
+      const data = (await response.json()) as RouteResponse<typeof GET>;
+
+      expect(response.status).toBe(200);
+      expect(data).toHaveProperty('user');
+      expect(data).toHaveProperty('timestamp');
+      expect(data.user).toEqual({ id: 'user123', name: 'John Doe' });
+      expect(typeof data.timestamp).toBe('number');
+    });
+
+    it('should handle async handlers with proper type inference', async () => {
+      const GET = createZodRoute()
+        .params(z.object({ id: z.string() }))
+        .handler(async (request, context) => {
+          return {
+            id: context.params.id,
+            async: true,
+            processedAt: new Date().toISOString(),
+          };
+        });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<{
+        id: string;
+        async: boolean;
+        processedAt: string;
+      }>();
+
+      const request = new Request('http://localhost/');
+      const response = await GET(request, { params: Promise.resolve({ id: 'test-id' }) });
+      const data = (await response.json()) as RouteResponse<typeof GET>;
+
+      expect(response.status).toBe(200);
+      expect(data).toMatchObject({
+        id: 'test-id',
+        async: true,
+      });
+      expect(typeof data.processedAt).toBe('string');
+    });
+
+    it('should support conditional return types', async () => {
+      const GET = createZodRoute()
+        .query(z.object({ format: z.enum(['json', 'text']).optional() }))
+        .handler((request, context) => {
+          if (context.query.format === 'text') {
+            return new Response('Text response', {
+              headers: { 'Content-Type': 'text/plain' },
+            });
+          }
+
+          return { format: 'json', data: 'JSON response' };
+        });
+
+      const jsonRequest = new Request('http://localhost/?format=json');
+      const jsonResponse = await GET(jsonRequest, { params: Promise.resolve({}) });
+      const jsonData = await jsonResponse.json();
+
+      expect(jsonResponse.status).toBe(200);
+      expect(jsonResponse.headers.get('Content-Type')).toBe('application/json');
+      expect(jsonData).toEqual({ format: 'json', data: 'JSON response' });
+
+      const textRequest = new Request('http://localhost/?format=text');
+      const textResponse = await GET(textRequest, { params: Promise.resolve({}) });
+      const textData = await textResponse.text();
+
+      expect(textResponse.headers.get('Content-Type')).toBe('text/plain');
+      expect(textData).toBe('Text response');
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should handle null and undefined returns', async () => {
+      const GET1 = createZodRoute().handler(() => {
+        return null;
+      });
+
+      const GET2 = createZodRoute().handler(() => {
+        return undefined;
+      });
+
+      expectTypeOf<RouteResponse<typeof GET1>>().toExtend<null>();
+      expectTypeOf<RouteResponse<typeof GET2>>().toExtend<undefined>();
+
+      const request = new Request('http://localhost/');
+
+      const response1 = await GET1(request, { params: Promise.resolve({}) });
+      const data1 = await response1.json();
+      expect(data1).toBe(null);
+
+      const response2 = await GET2(request, { params: Promise.resolve({}) });
+      const text2 = await response2.text();
+      // undefined is returned as an empty JSON response
+      expect(text2).toBe('');
+    });
+
+    it('should handle primitive return types', async () => {
+      const GET1 = createZodRoute().handler(() => {
+        return 'string response';
+      });
+
+      const GET2 = createZodRoute().handler(() => {
+        return 42;
+      });
+
+      const GET3 = createZodRoute().handler(() => {
+        return true;
+      });
+
+      expectTypeOf<RouteResponse<typeof GET1>>().toExtend<string>();
+      expectTypeOf<RouteResponse<typeof GET2>>().toExtend<number>();
+      expectTypeOf<RouteResponse<typeof GET3>>().toExtend<boolean>();
+
+      const request = new Request('http://localhost/');
+
+      const response1 = await GET1(request, { params: Promise.resolve({}) });
+      const data1 = await response1.json();
+      expect(data1).toBe('string response');
+
+      const response2 = await GET2(request, { params: Promise.resolve({}) });
+      const data2 = await response2.json();
+      expect(data2).toBe(42);
+
+      const response3 = await GET3(request, { params: Promise.resolve({}) });
+      const data3 = await response3.json();
+      expect(data3).toBe(true);
+    });
+
+    it('should handle array return types', async () => {
+      const GET = createZodRoute().handler(() => {
+        return [
+          { id: 1, name: 'Item 1' },
+          { id: 2, name: 'Item 2' },
+        ];
+      });
+
+      expectTypeOf<RouteResponse<typeof GET>>().toExtend<Array<{ id: number; name: string }>>();
+
+      const request = new Request('http://localhost/');
+      const response = await GET(request, { params: Promise.resolve({}) });
+      const data = await response.json();
+
+      expect(Array.isArray(data)).toBe(true);
+      expect(data).toEqual([
+        { id: 1, name: 'Item 1' },
+        { id: 2, name: 'Item 2' },
+      ]);
+    });
   });
 });
