@@ -1,5 +1,5 @@
 // eslint-disable-next-line import/no-named-as-default
-import z from 'zod';
+import z from 'zod/v4';
 
 import {
   HandlerFunction,
@@ -40,7 +40,7 @@ export class RouteHandlerBuilder<
   };
   readonly middlewares: Array<MiddlewareFunction<TContext, Record<string, unknown>, z.infer<TMetadata>>>;
   readonly handleServerError?: HandlerServerErrorFn;
-  readonly metadataValue: z.infer<TMetadata>;
+  readonly metadataValue?: z.infer<TMetadata>;
   readonly contextType!: TContext;
 
   constructor({
@@ -116,8 +116,11 @@ export class RouteHandlerBuilder<
    */
   defineMetadata<T extends z.Schema>(schema: T) {
     return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, T>({
-      ...this,
       config: { ...this.config, metadataSchema: schema },
+      middlewares: [],
+      handleServerError: this.handleServerError,
+      contextType: this.contextType,
+      metadataValue: undefined,
     });
   }
 
@@ -199,7 +202,7 @@ export class RouteHandlerBuilder<
               JSON.stringify({ message: 'Invalid params', errors: paramsResult.error.issues }),
             );
           }
-          params = paramsResult.data;
+          params = paramsResult.data as Record<string, unknown>;
         }
 
         // Validate the query against the provided schema

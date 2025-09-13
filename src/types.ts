@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-types */
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Schema } from 'zod';
+import { Schema } from 'zod/v4';
 
 /**
  * Function that is called when the route handler is executed and all the middleware has been executed

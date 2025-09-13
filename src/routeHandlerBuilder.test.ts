@@ -5,7 +5,7 @@ import { createZodRoute } from './createZodRoute';
 import { MiddlewareFunction } from './types';
 
 const paramsSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
 });
 
 const querySchema = z.object({
@@ -60,6 +60,7 @@ describe('query validation', () => {
   it('should validate and handle valid query', async () => {
     const GET = createZodRoute()
       .params(paramsSchema)
+      .query(querySchema)
       .handler((request, context) => {
         expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
         const search = context.query.search;
@@ -93,6 +94,7 @@ describe('query validation', () => {
   it('should validate and handle valid query when query is array', async () => {
     const GET = createZodRoute()
       .params(paramsSchema)
+      .query(querySchema)
       .handler((request, context) => {
         expectTypeOf(context.query).toMatchTypeOf<z.infer<typeof querySchema>>();
         const status = context.query.status;
