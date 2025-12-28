@@ -1,5 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
-import { z } from 'zod';
+import { z } from 'zod/v4';
 
 import { createZodRoute } from './createZodRoute';
 import { RouteHandlerBuilder } from './routeHandlerBuilder';
@@ -27,7 +27,7 @@ describe('params validation', () => {
     const GET = createZodRoute()
       .params(paramsSchema)
       .handler((request, context) => {
-        expectTypeOf(context.params).toMatchObjectType<z.output<typeof paramsSchema>>();
+        expectTypeOf(context.params).toEqualTypeOf<z.output<typeof paramsSchema>>();
         const { id } = context.params;
         return Response.json({ id }, { status: 200 });
       });
@@ -55,6 +55,72 @@ describe('params validation', () => {
     expect(response.status).toBe(400);
     expect(data.message).toBe('Invalid params');
   });
+
+  it('should extend params schema for nested routes', async () => {
+    const userRouteHandler = createZodRoute().params(z.object({ userId: z.uuid() }));
+
+    const GET = userRouteHandler.params(z.object({ organizationId: z.uuid() }), true).handler((request, context) => {
+      expectTypeOf(context.params).toEqualTypeOf<{ userId: string; organizationId: string }>();
+      const { userId, organizationId } = context.params;
+      return Response.json({ userId, organizationId }, { status: 200 });
+    });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: paramsToPromise({
+        userId: '550e8400-e29b-41d4-a716-446655440000',
+        organizationId: '660e8400-e29b-41d4-a716-446655440001',
+      }),
+    });
+    const data = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({
+      userId: '550e8400-e29b-41d4-a716-446655440000',
+      organizationId: '660e8400-e29b-41d4-a716-446655440001',
+    });
+  });
+
+  it('should validate all params when using extend mode', async () => {
+    const userRouteHandler = createZodRoute().params(z.object({ userId: z.uuid() }));
+
+    const GET = userRouteHandler.params(z.object({ organizationId: z.uuid() }), true).handler((request, context) => {
+      expectTypeOf(context.params).toEqualTypeOf<{ userId: string; organizationId: string }>();
+      const { userId, organizationId } = context.params;
+      return Response.json({ userId, organizationId }, { status: 200 });
+    });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: paramsToPromise({
+        userId: 'invalid-uuid',
+        organizationId: '660e8400-e29b-41d4-a716-446655440001',
+      }),
+    });
+    const data = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(400);
+    expect(data.message).toBe('Invalid params');
+  });
+
+  it('should work with extend mode when starting from empty params', async () => {
+    const GET = createZodRoute()
+      .params(z.object({ userId: z.uuid() }), true)
+      .handler((request, context) => {
+        expectTypeOf(context.params).toEqualTypeOf<{ userId: string }>();
+        const { userId } = context.params;
+        return Response.json({ userId }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/');
+    const response = await GET(request, {
+      params: paramsToPromise({ userId: '550e8400-e29b-41d4-a716-446655440000' }),
+    });
+    const data = (await response.json()) as Record<string, unknown>;
+
+    expect(response.status).toBe(200);
+    expect(data).toEqual({ userId: '550e8400-e29b-41d4-a716-446655440000' });
+  });
 });
 
 describe('query validation', () => {
@@ -63,7 +129,7 @@ describe('query validation', () => {
       .params(paramsSchema)
       .query(querySchema)
       .handler((request, context) => {
-        expectTypeOf(context.query).toMatchObjectType<z.output<typeof querySchema>>();
+        expectTypeOf(context.query).toEqualTypeOf<z.output<typeof querySchema>>();
         const search = context.query.search;
         return Response.json({ search }, { status: 200 });
       });
@@ -97,7 +163,7 @@ describe('query validation', () => {
       .params(paramsSchema)
       .query(querySchema)
       .handler((request, context) => {
-        expectTypeOf(context.query).toMatchObjectType<z.output<typeof querySchema>>();
+        expectTypeOf(context.query).toEqualTypeOf<z.output<typeof querySchema>>();
         const status = context.query.status;
         return Response.json({ status }, { status: 200 });
       });
@@ -116,7 +182,7 @@ describe('body validation', () => {
     const POST = createZodRoute()
       .body(bodySchema)
       .handler((request, context) => {
-        expectTypeOf(context.body).toMatchObjectType<z.output<typeof bodySchema>>();
+        expectTypeOf(context.body).toEqualTypeOf<z.output<typeof bodySchema>>();
         const field = context.body.field;
         return Response.json({ field }, { status: 200 });
       });
@@ -312,7 +378,7 @@ describe('combined validation', () => {
         const { id } = context.params;
         const { user } = context.ctx;
 
-        expectTypeOf(user).toMatchObjectType<{ id: string }>();
+        expectTypeOf(user).toEqualTypeOf<{ id: string; role: string }>();
 
         return Response.json({ id, user }, { status: 200 });
       });
@@ -336,7 +402,7 @@ describe('combined validation', () => {
       })
       .use(async ({ next, ctx }) => {
         const user = ctx.user;
-        expectTypeOf(user).toMatchObjectType<{ id: string }>();
+        expectTypeOf(user).toEqualTypeOf<{ id: string }>();
 
         const result = await next({ ctx: { permissions: ['read', 'write'] } });
 
@@ -348,7 +414,7 @@ describe('combined validation', () => {
         const { user, permissions } = context.ctx;
 
         // Context should be automatically typed without explicit type
-        expectTypeOf(user).toMatchObjectType<{ id: string }>();
+        expectTypeOf(user).toEqualTypeOf<{ id: string }>();
         expectTypeOf(permissions).toExtend<string[]>();
 
         return Response.json({ id, user, permissions }, { status: 200 });

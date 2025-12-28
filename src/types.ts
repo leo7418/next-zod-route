@@ -1,4 +1,4 @@
-import { ZodType } from 'zod';
+import type { ZodType } from 'zod/v4';
 
 /**
  * Function that is called when the route handler is executed and all the middleware has been executed
@@ -69,11 +69,11 @@ export type MiddlewareResult<TContext> = Response & { ctx?: TContext };
  * @param querySchema - Schema for the route query parameters
  * @param bodySchema - Schema for the route body
  */
-export interface RouteHandlerBuilderConfig {
+export type RouteHandlerBuilderConfig = {
   paramsSchema: ZodType;
   querySchema: ZodType;
   bodySchema: ZodType;
-}
+};
 
 /**
  * Original Next.js route handler type for reference

@@ -77,7 +77,7 @@ export const POST = createZodRoute()
     const { field } = context.body;
 
     // Custom status
-    return NextResponse.json({ id, search, field }), { status: 400 };
+    return (NextResponse.json({ id, search, field }), { status: 400 });
   });
 ```
 
@@ -127,6 +127,48 @@ const route = createZodRoute();
 
 // Create other re-usable route
 const authRoute = route.use(...)
+```
+
+### Nested Routes with params() extend parameter
+
+When working with nested routes in Next.js, you can use `params()` with `extend: true` to build a hierarchy of route handlers without having to redeclare all parameters at each level.
+
+**Problem:** Without the extend parameter, you need to redeclare all parent parameters at each nested level:
+
+```ts
+// ❌ Repetitive approach
+const userRoute = createZodRoute().params(
+  z.object({
+    userId: z.string().uuid(),
+  }),
+);
+
+const userOrgRoute = userRoute.params(
+  z.object({
+    userId: z.string().uuid(), // Redeclared
+    organizationId: z.string().uuid(),
+  }),
+);
+```
+
+**Solution:** Use `params(z.object({...}), true)` to extend the existing parameter schema:
+
+```ts
+// ✅ Composable approach
+const userRoute = createZodRoute().params(
+  z.object({
+    userId: z.string().uuid(),
+  }),
+  true,
+);
+
+const userOrgRoute = userRoute.params(
+  z.object({
+    organizationId: z.string().uuid(),
+  }),
+  true,
+);
+// Now has both userId and organizationId
 ```
 
 ### Static Parameters with Metadata

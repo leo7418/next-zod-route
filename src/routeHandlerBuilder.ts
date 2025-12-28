@@ -1,4 +1,4 @@
-import z from 'zod';
+import z from 'zod/v4';
 
 import type {
   HandlerFormData,
@@ -52,7 +52,7 @@ export class RouteHandlerBuilder<
 
   readonly handleServerError?: HandlerServerErrorFn;
   readonly handleFormData?: HandlerFormData;
-  readonly metadataValue?: z.output<TMetadata>;
+  readonly metadataValue?: z.infer<TMetadata>;
   readonly contextType!: TContext;
 
   constructor({
@@ -102,12 +102,45 @@ export class RouteHandlerBuilder<
    * @param schema - The schema for the params
    * @returns A new instance of the RouteHandlerBuilder
    */
-  params<T extends z.ZodType>(schema: T) {
-    return new RouteHandlerBuilder<T, TQuery, TBody, TContext, TMetadata>({
-      config: { ...this.config, paramsSchema: schema },
+  params<T extends z.ZodType>(schema: T): RouteHandlerBuilder<T, TQuery, TBody, TContext, TMetadata>;
+
+  /**
+   * Extend the existing params schema with additional fields
+   * @param schema - A Zod object schema to merge with existing params
+   * @param extend - Must be true to enable extend mode
+   * @returns A new instance of the RouteHandlerBuilder
+   * @example
+   * ```ts
+   * const userRoute = createZodRoute().params(z.object({ userId: z.string() }), true);
+   * const orgRoute = userRoute.params(z.object({ organizationId: z.string() }), true);
+   * // orgRoute now has both userId and organizationId
+   * ```
+   */
+  params<T extends z.ZodType>(
+    schema: T,
+    extend: true,
+  ): RouteHandlerBuilder<
+    TParams extends z.ZodObject<infer TParamsRaw>
+      ? T extends z.ZodObject<infer TRaw>
+        ? z.ZodObject<TParamsRaw & TRaw>
+        : T
+      : T,
+    TQuery,
+    TBody,
+    TContext,
+    TMetadata
+  >;
+
+  params<T extends z.ZodType>(schema: T, extend?: boolean) {
+    const baseSchema = this.config.paramsSchema as unknown as z.ZodObject | undefined;
+    const additionalFields = schema as unknown as z.ZodObject;
+    const finalSchema = extend && baseSchema ? baseSchema.extend(additionalFields.shape) : additionalFields;
+
+    return new RouteHandlerBuilder<typeof finalSchema, TQuery, TBody, TContext, TMetadata>({
+      config: { ...this.config, paramsSchema: finalSchema },
       middlewares: this.middlewares as unknown as Array<
         MiddlewareFunction<
-          z.output<T>,
+          z.output<typeof finalSchema>,
           z.output<TQuery>,
           z.output<TBody>,
           TContext,
@@ -180,16 +213,7 @@ export class RouteHandlerBuilder<
   defineMetadata<T extends z.ZodType>(schema: T) {
     return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, T>({
       config: { ...this.config, metadataSchema: schema },
-      middlewares: this.middlewares as unknown as Array<
-        MiddlewareFunction<
-          z.output<TParams>,
-          z.output<TQuery>,
-          z.output<TBody>,
-          TContext,
-          Record<string, unknown>,
-          z.output<T>
-        >
-      >,
+      middlewares: [],
       handleServerError: this.handleServerError,
       handleFormData: this.handleFormData,
       contextType: this.contextType,
@@ -287,7 +311,7 @@ export class RouteHandlerBuilder<
               JSON.stringify({ message: 'Invalid params', errors: paramsResult.error.issues }),
             );
           }
-          params = paramsResult.data;
+          params = paramsResult.data as Record<string, unknown>;
         }
 
         // Validate the query against the provided schema
