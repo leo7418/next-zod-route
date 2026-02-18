@@ -594,6 +594,121 @@ describe('HTTP methods handling', () => {
   });
 });
 
+describe('HTTP method default status codes', () => {
+  it('should return 200 for GET requests', async () => {
+    const GET = createZodRoute().handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'GET' });
+    const response = await GET(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should return 201 for POST requests', async () => {
+    const POST = createZodRoute().handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'POST' });
+    const response = await POST(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(201);
+  });
+
+  it('should return 200 for PUT requests', async () => {
+    const PUT = createZodRoute().handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'PUT' });
+    const response = await PUT(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should return 200 for PATCH requests', async () => {
+    const PATCH = createZodRoute().handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'PATCH' });
+    const response = await PATCH(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should return 204 with no body for DELETE requests', async () => {
+    const DELETE = createZodRoute().handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'DELETE' });
+    const response = await DELETE(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(204);
+    expect(await response.text()).toBe('');
+  });
+
+  it('should return 200 as fallback for unknown HTTP methods', async () => {
+    const HANDLER = createZodRoute().handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'OPTIONS' });
+    const response = await HANDLER(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should not override status when handler returns a Response directly', async () => {
+    const POST = createZodRoute().handler(() => {
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    });
+
+    const request = new Request('http://localhost/', { method: 'POST' });
+    const response = await POST(request, { params: Promise.resolve({}) });
+
+    // Handler returned a Response directly — status should not be overridden to 201
+    expect(response.status).toBe(200);
+  });
+});
+
+describe('custom statusMap', () => {
+  it('should override POST status with custom statusMap', async () => {
+    const POST = createZodRoute({ statusMap: { POST: 200 } }).handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'POST' });
+    const response = await POST(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(200);
+  });
+
+  it('should merge custom statusMap with defaults', async () => {
+    const route = createZodRoute({ statusMap: { POST: 200 } });
+
+    const GET = route.handler(() => ({ ok: true }));
+    const getRequest = new Request('http://localhost/', { method: 'GET' });
+    expect((await GET(getRequest, { params: Promise.resolve({}) })).status).toBe(200);
+
+    const DELETE = route.handler(() => ({ ok: true }));
+    const deleteRequest = new Request('http://localhost/', { method: 'DELETE' });
+    expect((await DELETE(deleteRequest, { params: Promise.resolve({}) })).status).toBe(204);
+  });
+
+  it('should support custom methods in statusMap', async () => {
+    const HANDLER = createZodRoute({ statusMap: { OPTIONS: 204 } }).handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', { method: 'OPTIONS' });
+    const response = await HANDLER(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(204);
+  });
+
+  it('should propagate statusMap through builder chain', async () => {
+    const POST = createZodRoute({ statusMap: { POST: 202 } })
+      .body(z.object({ name: z.string() }))
+      .handler(() => ({ ok: true }));
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'test' }),
+    });
+    const response = await POST(request, { params: Promise.resolve({}) });
+
+    expect(response.status).toBe(202);
+  });
+});
+
 describe('metadata validation', () => {
   const metadataSchema = z.object({
     permission: z.string(),

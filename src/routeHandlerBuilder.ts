@@ -11,6 +11,16 @@ import type {
   OriginalRouteResponse,
 } from './types';
 
+export const defaultStatusMap = {
+  GET: 200,
+  POST: 201,
+  PUT: 200,
+  PATCH: 200,
+  DELETE: 204,
+} as const;
+
+export type StatusMap = Partial<Record<string, number>>;
+
 /**
  * Type of the middleware function passed to a safe action client.
  */
@@ -54,6 +64,7 @@ export class RouteHandlerBuilder<
   readonly handleFormData?: HandlerFormData;
   readonly metadataValue?: z.infer<TMetadata>;
   readonly contextType!: TContext;
+  readonly statusMap: StatusMap;
 
   constructor({
     config = {
@@ -67,6 +78,7 @@ export class RouteHandlerBuilder<
     handleFormData,
     contextType,
     metadataValue,
+    statusMap,
   }: {
     config?: {
       paramsSchema: TParams;
@@ -88,13 +100,15 @@ export class RouteHandlerBuilder<
     handleFormData?: HandlerFormData;
     contextType: TContext;
     metadataValue?: z.output<TMetadata>;
+    statusMap?: StatusMap;
   }) {
     this.config = config;
     this.middlewares = middlewares;
     this.handleServerError = handleServerError;
     this.handleFormData = handleFormData;
-    this.contextType = contextType as TContext;
+    this.contextType = contextType;
     this.metadataValue = metadataValue;
+    this.statusMap = { ...defaultStatusMap, ...statusMap };
   }
 
   /**
@@ -152,6 +166,7 @@ export class RouteHandlerBuilder<
       handleFormData: this.handleFormData,
       contextType: this.contextType,
       metadataValue: this.metadataValue,
+      statusMap: this.statusMap,
     });
   }
 
@@ -177,6 +192,7 @@ export class RouteHandlerBuilder<
       handleFormData: this.handleFormData,
       contextType: this.contextType,
       metadataValue: this.metadataValue,
+      statusMap: this.statusMap,
     });
   }
 
@@ -202,6 +218,7 @@ export class RouteHandlerBuilder<
       handleFormData: this.handleFormData,
       contextType: this.contextType,
       metadataValue: this.metadataValue,
+      statusMap: this.statusMap,
     });
   }
 
@@ -218,6 +235,7 @@ export class RouteHandlerBuilder<
       handleFormData: this.handleFormData,
       contextType: this.contextType,
       metadataValue: undefined,
+      statusMap: this.statusMap,
     });
   }
 
@@ -363,10 +381,16 @@ export class RouteHandlerBuilder<
 
               if (result instanceof Response) return result as OriginalRouteResponse<Awaited<TReturn>>;
 
-              return new Response(JSON.stringify(result), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }) as OriginalRouteResponse<Awaited<TReturn>>;
+              const status = this.statusMap[request.method] ?? 200;
+
+              return (
+                status === 204
+                  ? new Response(null, { status: 204 })
+                  : new Response(JSON.stringify(result), {
+                      status,
+                      headers: { 'Content-Type': 'application/json' },
+                    })
+              ) as OriginalRouteResponse<Awaited<TReturn>>;
             } catch (error) {
               return handleError(error as Error, this.handleServerError);
             }
