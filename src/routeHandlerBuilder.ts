@@ -1,4 +1,4 @@
-import z from 'zod/v4';
+import type z from 'zod';
 
 import type {
   HandlerFormData,
@@ -10,6 +10,20 @@ import type {
   OriginalRouteHandler,
   OriginalRouteResponse,
 } from './types';
+
+/**
+ * Minimal schema interface satisfied by both zod/v4 and zod/mini schemas.
+ * The builder only needs safeParse() and output type inference.
+ */
+export type AnyZodSchema<TOutput = unknown> = {
+  _zod: { output: TOutput };
+  safeParse(
+    data: unknown,
+  ): { success: true; data: TOutput; error?: never } | { success: false; data?: never; error: { issues: unknown[] } };
+};
+
+/** Infer the output type of any schema compatible with AnyZodSchema. */
+type SchemaOutput<T extends AnyZodSchema> = T['_zod']['output'];
 
 export const defaultStatusMap = {
   GET: 200,
@@ -36,11 +50,11 @@ export class InternalRouteHandlerError extends Error {
 }
 
 export class RouteHandlerBuilder<
-  TParams extends z.ZodType = z.ZodType,
-  TQuery extends z.ZodType = z.ZodType,
-  TBody extends z.ZodType = z.ZodType,
+  TParams extends AnyZodSchema = AnyZodSchema,
+  TQuery extends AnyZodSchema = AnyZodSchema,
+  TBody extends AnyZodSchema = AnyZodSchema,
   TContext = {},
-  TMetadata extends z.ZodType = z.ZodType,
+  TMetadata extends AnyZodSchema = AnyZodSchema,
 > {
   readonly config: {
     paramsSchema: TParams;
@@ -51,18 +65,18 @@ export class RouteHandlerBuilder<
 
   readonly middlewares: Array<
     MiddlewareFunction<
-      z.output<TParams>,
-      z.output<TQuery>,
-      z.output<TBody>,
+      SchemaOutput<TParams>,
+      SchemaOutput<TQuery>,
+      SchemaOutput<TBody>,
       TContext,
       Record<string, unknown>,
-      z.output<TMetadata>
+      SchemaOutput<TMetadata>
     >
   >;
 
   readonly handleServerError?: HandlerServerErrorFn;
   readonly handleFormData?: HandlerFormData;
-  readonly metadataValue?: z.infer<TMetadata>;
+  readonly metadataValue?: SchemaOutput<TMetadata>;
   readonly contextType!: TContext;
   readonly statusMap: StatusMap;
 
@@ -88,18 +102,18 @@ export class RouteHandlerBuilder<
     };
     middlewares?: Array<
       MiddlewareFunction<
-        z.output<TParams>,
-        z.output<TQuery>,
-        z.output<TBody>,
+        SchemaOutput<TParams>,
+        SchemaOutput<TQuery>,
+        SchemaOutput<TBody>,
         TContext,
         Record<string, unknown>,
-        z.output<TMetadata>
+        SchemaOutput<TMetadata>
       >
     >;
     handleServerError?: HandlerServerErrorFn;
     handleFormData?: HandlerFormData;
     contextType: TContext;
-    metadataValue?: z.output<TMetadata>;
+    metadataValue?: SchemaOutput<TMetadata>;
     statusMap?: StatusMap;
   }) {
     this.config = config;
@@ -116,7 +130,7 @@ export class RouteHandlerBuilder<
    * @param schema - The schema for the params
    * @returns A new instance of the RouteHandlerBuilder
    */
-  params<T extends z.ZodType>(schema: T): RouteHandlerBuilder<T, TQuery, TBody, TContext, TMetadata>;
+  params<T extends AnyZodSchema>(schema: T): RouteHandlerBuilder<T, TQuery, TBody, TContext, TMetadata>;
 
   /**
    * Extend the existing params schema with additional fields
@@ -130,7 +144,7 @@ export class RouteHandlerBuilder<
    * // orgRoute now has both userId and organizationId
    * ```
    */
-  params<T extends z.ZodType>(
+  params<T extends AnyZodSchema>(
     schema: T,
     extend: true,
   ): RouteHandlerBuilder<
@@ -145,21 +159,22 @@ export class RouteHandlerBuilder<
     TMetadata
   >;
 
-  params<T extends z.ZodType>(schema: T, extend?: boolean) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  params(schema: AnyZodSchema, extend?: boolean): any {
     const baseSchema = this.config.paramsSchema as unknown as z.ZodObject | undefined;
     const additionalFields = schema as unknown as z.ZodObject;
     const finalSchema = extend && baseSchema ? baseSchema.extend(additionalFields.shape) : additionalFields;
 
-    return new RouteHandlerBuilder<typeof finalSchema, TQuery, TBody, TContext, TMetadata>({
+    return new RouteHandlerBuilder({
       config: { ...this.config, paramsSchema: finalSchema },
       middlewares: this.middlewares as unknown as Array<
         MiddlewareFunction<
-          z.output<typeof finalSchema>,
-          z.output<TQuery>,
-          z.output<TBody>,
+          SchemaOutput<typeof finalSchema>,
+          SchemaOutput<TQuery>,
+          SchemaOutput<TBody>,
           TContext,
           Record<string, unknown>,
-          z.output<TMetadata>
+          SchemaOutput<TMetadata>
         >
       >,
       handleServerError: this.handleServerError,
@@ -175,17 +190,17 @@ export class RouteHandlerBuilder<
    * @param schema - The schema for the query
    * @returns A new instance of the RouteHandlerBuilder
    */
-  query<T extends z.ZodType>(schema: T) {
+  query<T extends AnyZodSchema>(schema: T) {
     return new RouteHandlerBuilder<TParams, T, TBody, TContext, TMetadata>({
       config: { ...this.config, querySchema: schema },
       middlewares: this.middlewares as unknown as Array<
         MiddlewareFunction<
-          z.output<TParams>,
-          z.output<T>,
-          z.output<TBody>,
+          SchemaOutput<TParams>,
+          SchemaOutput<T>,
+          SchemaOutput<TBody>,
           TContext,
           Record<string, unknown>,
-          z.output<TMetadata>
+          SchemaOutput<TMetadata>
         >
       >,
       handleServerError: this.handleServerError,
@@ -201,17 +216,17 @@ export class RouteHandlerBuilder<
    * @param schema - The schema for the body
    * @returns A new instance of the RouteHandlerBuilder
    */
-  body<T extends z.ZodType>(schema: T) {
+  body<T extends AnyZodSchema>(schema: T) {
     return new RouteHandlerBuilder<TParams, TQuery, T, TContext, TMetadata>({
       config: { ...this.config, bodySchema: schema },
       middlewares: this.middlewares as unknown as Array<
         MiddlewareFunction<
-          z.output<TParams>,
-          z.output<TQuery>,
-          z.output<T>,
+          SchemaOutput<TParams>,
+          SchemaOutput<TQuery>,
+          SchemaOutput<T>,
           TContext,
           Record<string, unknown>,
-          z.output<TMetadata>
+          SchemaOutput<TMetadata>
         >
       >,
       handleServerError: this.handleServerError,
@@ -227,7 +242,7 @@ export class RouteHandlerBuilder<
    * @param schema - The schema for the metadata
    * @returns A new instance of the RouteHandlerBuilder
    */
-  defineMetadata<T extends z.ZodType>(schema: T) {
+  defineMetadata<T extends AnyZodSchema>(schema: T) {
     return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, T>({
       config: { ...this.config, metadataSchema: schema },
       middlewares: [],
@@ -244,7 +259,7 @@ export class RouteHandlerBuilder<
    * @param value - The metadata value that will be passed to middlewares
    * @returns A new instance of the RouteHandlerBuilder
    */
-  metadata(value: z.output<TMetadata>) {
+  metadata(value: SchemaOutput<TMetadata>) {
     return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext, TMetadata>({
       ...this,
       metadataValue: value,
@@ -258,12 +273,12 @@ export class RouteHandlerBuilder<
    */
   use<TNestContext extends Record<string, unknown>>(
     middleware: MiddlewareFunction<
-      z.output<TParams>,
-      z.output<TQuery>,
-      z.output<TBody>,
+      SchemaOutput<TParams>,
+      SchemaOutput<TQuery>,
+      SchemaOutput<TBody>,
       TContext,
       TNestContext,
-      z.output<TMetadata>
+      SchemaOutput<TMetadata>
     >,
   ) {
     return new RouteHandlerBuilder<TParams, TQuery, TBody, TContext & TNestContext, TMetadata>({
@@ -280,11 +295,11 @@ export class RouteHandlerBuilder<
    */
   handler<TReturn>(
     handler: HandlerFunction<
-      z.output<TParams>,
-      z.output<TQuery>,
-      z.output<TBody>,
+      SchemaOutput<TParams>,
+      SchemaOutput<TQuery>,
+      SchemaOutput<TBody>,
       TContext,
-      z.output<TMetadata>,
+      SchemaOutput<TMetadata>,
       TReturn
     >,
   ): OriginalRouteHandler<Promise<OriginalRouteResponse<Awaited<TReturn>>>> {
@@ -372,11 +387,11 @@ export class RouteHandlerBuilder<
           if (index >= this.middlewares.length) {
             try {
               const result = await handler(request, {
-                params: params as z.output<TParams>,
-                query: query as z.output<TQuery>,
-                body: body as z.output<TBody>,
+                params: params as SchemaOutput<TParams>,
+                query: query as SchemaOutput<TQuery>,
+                body: body as SchemaOutput<TBody>,
                 ctx: middlewareContext,
-                metadata: metadata as z.output<TMetadata>,
+                metadata: metadata as SchemaOutput<TMetadata>,
               });
 
               if (result instanceof Response) return result as OriginalRouteResponse<Awaited<TReturn>>;
@@ -411,9 +426,9 @@ export class RouteHandlerBuilder<
           try {
             const result = await middleware({
               request,
-              params: params as z.output<TParams>,
-              query: query as z.output<TQuery>,
-              body: body as z.output<TBody>,
+              params: params as SchemaOutput<TParams>,
+              query: query as SchemaOutput<TQuery>,
+              body: body as SchemaOutput<TBody>,
               ctx: middlewareContext,
               metadata,
               next,

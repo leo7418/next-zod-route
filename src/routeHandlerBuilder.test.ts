@@ -1,4 +1,5 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
+import { z as zmini } from 'zod/mini';
 import { z } from 'zod/v4';
 
 import { createZodRoute } from './createZodRoute';
@@ -1407,6 +1408,124 @@ describe('handleFormData option', () => {
     const data = (await response.json()) as Record<string, unknown>;
     expect(response.status).toBe(200);
     expect(data).toEqual({ field: 'test-field' });
+  });
+});
+
+describe('zod/mini compatibility', () => {
+  const miniParamsSchema = zmini.object({ id: zmini.string().check(zmini.uuid()) });
+  const miniQuerySchema = zmini.object({
+    search: zmini.string().check(zmini.minLength(1)),
+    status: zmini.optional(zmini.array(zmini.string())),
+  });
+  const miniBodySchema = zmini.object({ field: zmini.string() });
+
+  it('should validate params with a zod/mini schema', async () => {
+    const GET = createZodRoute()
+      .params(miniParamsSchema)
+      .handler((request, context) => {
+        const { id } = context.params;
+        return Response.json({ id }, { status: 200 });
+      });
+
+    const validRequest = new Request('http://localhost/');
+    const validResponse = await GET(validRequest, {
+      params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
+    });
+    expect(validResponse.status).toBe(200);
+    expect(await validResponse.json()).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000' });
+
+    const invalidRequest = new Request('http://localhost/');
+    const invalidResponse = await GET(invalidRequest, { params: paramsToPromise({ id: 'not-a-uuid' }) });
+    expect(invalidResponse.status).toBe(400);
+    expect(((await invalidResponse.json()) as Record<string, unknown>).message).toBe('Invalid params');
+  });
+
+  it('should validate query with a zod/mini schema', async () => {
+    const GET = createZodRoute()
+      .query(miniQuerySchema)
+      .handler((request, context) => {
+        return Response.json({ search: context.query.search }, { status: 200 });
+      });
+
+    const validRequest = new Request('http://localhost/?search=hello');
+    const validResponse = await GET(validRequest, { params: Promise.resolve({}) });
+    expect(validResponse.status).toBe(200);
+    expect(await validResponse.json()).toEqual({ search: 'hello' });
+
+    const invalidRequest = new Request('http://localhost/?search=');
+    const invalidResponse = await GET(invalidRequest, { params: Promise.resolve({}) });
+    expect(invalidResponse.status).toBe(400);
+    expect(((await invalidResponse.json()) as Record<string, unknown>).message).toBe('Invalid query');
+  });
+
+  it('should validate body with a zod/mini schema', async () => {
+    const POST = createZodRoute()
+      .body(miniBodySchema)
+      .handler((request, context) => {
+        return Response.json({ field: context.body.field }, { status: 200 });
+      });
+
+    const validRequest = new Request('http://localhost/', {
+      method: 'POST',
+      body: JSON.stringify({ field: 'hello' }),
+    });
+    const validResponse = await POST(validRequest, { params: Promise.resolve({}) });
+    expect(validResponse.status).toBe(200);
+    expect(await validResponse.json()).toEqual({ field: 'hello' });
+
+    const invalidRequest = new Request('http://localhost/', {
+      method: 'POST',
+      body: JSON.stringify({ field: 123 }),
+    });
+    const invalidResponse = await POST(invalidRequest, { params: Promise.resolve({}) });
+    expect(invalidResponse.status).toBe(400);
+    expect(((await invalidResponse.json()) as Record<string, unknown>).message).toBe('Invalid body');
+  });
+
+  it('should work with combined zod/mini schemas for params, query, and body', async () => {
+    const POST = createZodRoute()
+      .params(miniParamsSchema)
+      .query(miniQuerySchema)
+      .body(miniBodySchema)
+      .handler((request, context) => {
+        return Response.json(
+          { id: context.params.id, search: context.query.search, field: context.body.field },
+          { status: 200 },
+        );
+      });
+
+    const request = new Request('http://localhost/?search=test', {
+      method: 'POST',
+      body: JSON.stringify({ field: 'test-field' }),
+    });
+    const response = await POST(request, {
+      params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      id: '550e8400-e29b-41d4-a716-446655440000',
+      search: 'test',
+      field: 'test-field',
+    });
+  });
+
+  it('should work with mixed zod/v4 and zod/mini schemas', async () => {
+    const POST = createZodRoute()
+      .params(paramsSchema) // zod/v4
+      .body(miniBodySchema) // zod/mini
+      .handler((request, context) => {
+        return Response.json({ id: context.params.id, field: context.body.field }, { status: 200 });
+      });
+
+    const request = new Request('http://localhost/', {
+      method: 'POST',
+      body: JSON.stringify({ field: 'hello' }),
+    });
+    const response = await POST(request, {
+      params: paramsToPromise({ id: '550e8400-e29b-41d4-a716-446655440000' }),
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ id: '550e8400-e29b-41d4-a716-446655440000', field: 'hello' });
   });
 });
 

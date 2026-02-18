@@ -1,6 +1,6 @@
 {
   "name": "@l.leo/next-zod-route",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "A zod way to define route handlers in Next.js",
   "keywords": [
     "next",
@@ -14,14 +14,14 @@
     "nextjs zod route",
     "nextjs zod api route"
   ],
-  "homepage": "https://github.com/leo7418/apiplatform-fetch-builder#readme",
+  "homepage": "https://github.com/leo7418/next-zod-route#readme",
   "bugs": {
-    "url": "https://github.com/leo7418/apiplatform-fetch-builder/issues",
+    "url": "https://github.com/leo7418/next-zod-route/issues",
     "email": "help@melvynx.com"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/leo7418/apiplatform-fetch-builder.git"
+    "url": "git+https://github.com/leo7418/next-zod-route.git"
   },
   "license": "MIT",
   "author": {
